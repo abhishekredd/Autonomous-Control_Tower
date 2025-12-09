@@ -1,0 +1,12 @@
+# Connect to Redis
+redis-cli
+
+# Test connection
+ping
+# Should return: PONG
+
+# Check keys
+keys *
+
+# Exit
+exit

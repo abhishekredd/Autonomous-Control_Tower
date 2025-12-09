@@ -1,0 +1,8 @@
+# Create database tables
+alembic upgrade head
+
+# Run seed script to load simulation data
+python scripts/seed_data.py
+
+# Alternative: Run seed via Docker
+docker-compose exec api python scripts/seed_data.py

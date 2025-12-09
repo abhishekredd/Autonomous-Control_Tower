@@ -1,0 +1,8 @@
+# Start Celery worker (in a new terminal)
+celery -A app.core.celery_app worker --loglevel=info
+
+# Start Celery beat for scheduled tasks
+celery -A app.core.celery_app beat --loglevel=info
+
+# Or via Docker
+docker-compose up -d celery-worker celery-beat

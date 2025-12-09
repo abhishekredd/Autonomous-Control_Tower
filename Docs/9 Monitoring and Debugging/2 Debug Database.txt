@@ -1,0 +1,26 @@
+# Connect to database
+docker-compose exec postgres psql -U control_tower_user -d control_tower_db
+
+# Useful queries
+-- Check table sizes
+SELECT 
+    table_name,
+    pg_size_pretty(pg_total_relation_size(quote_ident(table_name))) as size
+FROM information_schema.tables
+WHERE table_schema = 'public'
+ORDER BY pg_total_relation_size(quote_ident(table_name)) DESC;
+
+-- Check recent activity
+SELECT * FROM shipment_events ORDER BY timestamp DESC LIMIT 10;
+
+-- Check risk distribution
+SELECT risk_type, severity, COUNT(*) as count 
+FROM risks 
+GROUP BY risk_type, severity 
+ORDER BY count DESC;
+
+-- Check shipment status distribution
+SELECT status, COUNT(*) as count 
+FROM shipments 
+GROUP BY status 
+ORDER BY count DESC;

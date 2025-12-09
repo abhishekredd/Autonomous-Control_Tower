@@ -1,0 +1,36 @@
+# Connect to PostgreSQL
+psql -h localhost -U control_tower_user -d control_tower_db
+
+# Check all data
+SELECT 'shipments' as table, COUNT(*) as count FROM shipments
+UNION ALL
+SELECT 'risks', COUNT(*) FROM risks
+UNION ALL
+SELECT 'shipment_events', COUNT(*) FROM shipment_events
+UNION ALL
+SELECT 'simulations', COUNT(*) FROM simulations
+UNION ALL
+SELECT 'shipment_routes', COUNT(*) FROM shipment_routes;
+
+# Check specific data patterns
+SELECT status, COUNT(*) as count FROM shipments GROUP BY status ORDER BY count DESC;
+
+SELECT severity, COUNT(*) as count FROM risks GROUP BY severity ORDER BY count DESC;
+
+SELECT risk_type, COUNT(*) as count FROM risks GROUP BY risk_type ORDER BY count DESC;
+
+# View a complete shipment with all relations
+SELECT 
+    s.tracking_number,
+    s.status,
+    s.origin,
+    s.destination,
+    s.is_at_risk,
+    s.risk_score,
+    COUNT(DISTINCT r.id) as risk_count,
+    COUNT(DISTINCT e.id) as event_count
+FROM shipments s
+LEFT JOIN risks r ON s.id = r.shipment_id
+LEFT JOIN shipment_events e ON s.id = e.shipment_id
+GROUP BY s.id
+LIMIT 10;

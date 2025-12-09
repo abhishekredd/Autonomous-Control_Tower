@@ -1,0 +1,13 @@
+# Option A: Start only database, Redis, and RabbitMQ
+docker-compose up -d postgres redis rabbitmq
+
+# Option B: Start everything except frontend
+docker-compose up -d postgres redis rabbitmq api celery-worker celery-beat
+
+# Check if services are running
+docker-compose ps
+
+# View logs
+docker-compose logs -f postgres  # For database
+docker-compose logs -f redis     # For Redis
+docker-compose logs -f rabbitmq  # For RabbitMQ

@@ -1,0 +1,11 @@
+# Method 1: Direct run
+cd frontend
+streamlit run app.py
+
+# Method 2: With specific port
+streamlit run app.py --server.port 8501 --server.address 0.0.0.0
+
+# Method 3: Via Docker
+docker-compose up -d frontend
+
+# Access at: http://localhost:8501

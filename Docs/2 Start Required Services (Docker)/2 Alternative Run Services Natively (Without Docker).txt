@@ -1,0 +1,22 @@
+# 1. Install and start PostgreSQL
+# Ubuntu/Debian:
+sudo apt-get install postgresql postgresql-contrib
+sudo service postgresql start
+
+# Create database and user
+sudo -u postgres psql
+CREATE USER control_tower_user WITH PASSWORD 'secure_password';
+CREATE DATABASE control_tower_db;
+GRANT ALL PRIVILEGES ON DATABASE control_tower_db TO control_tower_user;
+\q
+
+# 2. Install and start Redis
+sudo apt-get install redis-server
+sudo service redis-server start
+
+# 3. Install and start RabbitMQ
+sudo apt-get install rabbitmq-server
+sudo service rabbitmq-server start
+
+# Enable management plugin
+sudo rabbitmq-plugins enable rabbitmq_management

@@ -1,0 +1,25 @@
+# 1. Start infrastructure
+docker-compose up -d postgres redis rabbitmq
+
+# 2. Initialize database
+alembic upgrade head
+python scripts/seed_data_enhanced.py
+
+# 3. Start API
+uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+# 4. Start workers (in new terminals)
+celery -A app.core.celery_app worker --loglevel=info
+celery -A app.core.celery_app beat --loglevel=info
+
+# 5. Start MCP agents (in new terminals)
+python -m app.mcp.servers.risk_detector
+python -m app.mcp.servers.route_optimizer
+python -m app.mcp.servers.stakeholder_comms
+
+# 6. Test
+python scripts/test_comprehensive.py
+
+# 7. Access
+# API: http://localhost:8000/docs
+# Frontend: streamlit run frontend/app.py

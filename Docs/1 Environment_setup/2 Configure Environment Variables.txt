@@ -1,0 +1,21 @@
+# Copy the example environment file
+cp .env.example .env
+
+# Edit .env file with your configuration
+# Important variables to set:
+# - DATABASE_URL
+# - REDIS_URL
+# - RABBITMQ_URL
+# - OPENAI_API_KEY (if using AI features)
+# - SECRET_KEY
+
+# Sample .env configuration for local development:
+POSTGRES_USER=control_tower_user
+POSTGRES_PASSWORD=secure_password
+POSTGRES_DB=control_tower_db
+DATABASE_URL=postgresql://control_tower_user:secure_password@localhost:5432/control_tower_db
+REDIS_URL=redis://localhost:6379
+RABBITMQ_URL=amqp://guest:guest@localhost:5672/
+OPENAI_API_KEY=your_openai_api_key_here
+SECRET_KEY=your-secret-key-change-in-production
+DEBUG=True
