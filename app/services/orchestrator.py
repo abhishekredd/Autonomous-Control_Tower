@@ -304,7 +304,7 @@ class CentralOrchestrator:
                     "estimated_arrival": shipment.estimated_arrival,
                     "status": shipment.status.value,
                     "mode": shipment.mode.value,
-                    "metadata": shipment.metadata or {}
+                    "metadata": shipment.shipment_metadata or {}
                 }
     
     async def _get_port_congestion_level(self, port_code: str) -> float:

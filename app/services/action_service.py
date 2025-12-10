@@ -66,8 +66,8 @@ class ActionService:
             if parameters.get("alternative_port"):
                 shipment.next_port = parameters["alternative_port"]
             
-            shipment.metadata = {
-                **shipment.metadata,
+            shipment.shipment_metadata = {
+                **shipment.shipment_metadata,
                 "rerouted_at": datetime.utcnow().isoformat(),
                 "reroute_reason": "port_congestion",
                 "new_route_id": new_route.id
@@ -108,8 +108,8 @@ class ActionService:
                 return {"success": False, "error": "No new mode specified"}
             
             shipment.mode = new_mode
-            shipment.metadata = {
-                **shipment.metadata,
+            shipment.shipment_metadata = {
+                **shipment.shipment_metadata,
                 "mode_switched_at": datetime.utcnow().isoformat(),
                 "previous_mode": old_mode,
                 "mode_switch_reason": parameters.get("reason", "optimization")
@@ -146,8 +146,8 @@ class ActionService:
             
             service_level = parameters.get("service_level", "premium")
             
-            shipment.metadata = {
-                **shipment.metadata,
+            shipment.shipment_metadata = {
+                **shipment.shipment_metadata,
                 "customs_expedited_at": datetime.utcnow().isoformat(),
                 "customs_service_level": service_level,
                 "customs_estimated_clearance": (datetime.utcnow() + timedelta(hours=4)).isoformat()
@@ -186,8 +186,8 @@ class ActionService:
             new_eta = shipment.estimated_arrival + timedelta(hours=delay_hours)
             
             shipment.estimated_arrival = new_eta
-            shipment.metadata = {
-                **shipment.metadata,
+            shipment.shipment_metadata = {
+                **shipment.shipment_metadata,
                 "schedule_adjusted_at": datetime.utcnow().isoformat(),
                 "adjustment_reason": parameters.get("reason", "port_congestion"),
                 "delay_hours": delay_hours

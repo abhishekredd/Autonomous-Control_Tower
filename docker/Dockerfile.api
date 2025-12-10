@@ -1,18 +1,37 @@
+# Use a slim base image
+FROM python:3.11-slim AS builder
+
+WORKDIR /app
+
+# Install build dependencies only in builder stage
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends gcc libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
+
+# --- Runtime stage ---
 FROM python:3.11-slim
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y \
-    gcc \
-    postgresql-client \
+# Install only runtime dependencies (no gcc)
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends postgresql-client \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy installed packages from builder
+COPY --from=builder /usr/local /usr/local
 
+# Copy application source
 COPY . .
 
-RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+# Create non-root user
+RUN useradd -m -u 1000 appuser \
+    && chown -R appuser:appuser /app
 USER appuser
 
 EXPOSE 8000

@@ -56,7 +56,7 @@ class Shipment(TimeStampedBase):
     last_risk_check = Column(DateTime)
     
     # Metadata
-    metadata = Column(JSON, default={})
+    shipment_metadata = Column(JSON, default=dict)
     
     # Relationships
     risks = relationship("Risk", back_populates="shipment", cascade="all, delete-orphan")
@@ -72,7 +72,7 @@ class ShipmentEvent(TimeStampedBase):
     location = Column(String)
     description = Column(String)
     timestamp = Column(DateTime)
-    metadata = Column(JSON, default={})
+    event_metadata = Column(JSON, default=dict)
     
     shipment = relationship("Shipment", back_populates="events")
 

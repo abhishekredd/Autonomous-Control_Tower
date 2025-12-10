@@ -24,7 +24,7 @@ class Simulation(TimeStampedBase):
     status = Column(Enum(SimulationStatus), default=SimulationStatus.PENDING)
     
     # Input parameters
-    parameters = Column(JSON, default={})
+    parameters = Column(JSON, default=dict)
     scenario_description = Column(Text)
     
     # Results
@@ -35,7 +35,7 @@ class Simulation(TimeStampedBase):
     # Metadata
     initiated_by = Column(String)  # MCP agent, user, system
     execution_time = Column(Float)  # seconds
-    metadata = Column(JSON, default={})
+    simulation_metadata = Column(JSON, default=dict)
     
     # Relationships
     shipment = relationship("Shipment", back_populates="simulations")

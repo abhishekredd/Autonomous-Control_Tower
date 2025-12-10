@@ -115,7 +115,7 @@ class ShipmentService:
         # Update fields
         for field, value in update_data.dict(exclude_unset=True).items():
             if field == "metadata" and value:
-                shipment.metadata = {**shipment.metadata, **value}
+                shipment.shipment_metadata = {**shipment.shipment_metadata, **value}
             elif hasattr(shipment, field):
                 setattr(shipment, field, value)
         

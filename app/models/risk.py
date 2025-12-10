@@ -54,7 +54,7 @@ class Risk(TimeStampedBase):
     
     # Metadata
     source = Column(String)  # MCP agent, manual, external API
-    metadata = Column(JSON, default={})
+    risk_metadata = Column(JSON, default=dict)
     
     # Relationships
     shipment = relationship("Shipment", back_populates="risks")

@@ -54,7 +54,7 @@ class RiskService:
         """Detect customs delay risks"""
         risks = []
         
-        customs_status = shipment.metadata.get("customs_status")
+        customs_status = shipment.shipment_metadata.get("customs_status")
         if customs_status in ["delayed", "held", "under_review"]:
             risk = Risk(
                 shipment_id=shipment.id,
@@ -75,7 +75,7 @@ class RiskService:
         """Detect quality hold risks"""
         risks = []
         
-        quality_status = shipment.metadata.get("quality_status")
+        quality_status = shipment.shipment_metadata.get("quality_status")
         if quality_status in ["hold", "inspection"]:
             risk = Risk(
                 shipment_id=shipment.id,
