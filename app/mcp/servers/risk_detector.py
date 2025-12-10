@@ -16,12 +16,15 @@ class RiskDetectorServer(MCPServer):
     def __init__(self):
         super().__init__(MCPAgentType.RISK_DETECTOR)
         self.risk_service = RiskService()
+        self.pubsub = None  # store pubsub object
         
     async def start(self):
         await super().start()
         
-        # Subscribe to shipment updates
-        await redis_client.subscribe("shipment_updates")
+        # Create pubsub and subscribe to shipment updates
+        self.pubsub = redis_client.pubsub()
+        await self.pubsub.subscribe("shipment_updates")
+        print("📡 RiskDetector subscribed to: shipment_updates")
         
         # Start message processing loop
         asyncio.create_task(self._message_loop())
@@ -31,7 +34,7 @@ class RiskDetectorServer(MCPServer):
         while self.is_running:
             try:
                 # Check for new messages
-                message = await redis_client.get_message()
+                message = await self.pubsub.get_message(ignore_subscribe_messages=True, timeout=1.0)
                 if message:
                     await self._process_redis_message(message)
                 

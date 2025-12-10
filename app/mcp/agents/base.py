@@ -15,7 +15,8 @@ class BaseAgent(ABC):
         self.is_running = False
         self.message_queue = asyncio.Queue()
         self.context_store: Dict[str, Any] = {}
-        
+        self.pubsub = None  # store pubsub object
+    
     async def start(self):
         """Start the agent"""
         self.is_running = True
@@ -44,8 +45,13 @@ class BaseAgent(ABC):
         agent_channels = self._get_agent_channels()
         channels.extend(agent_channels)
         
+        # Create a pubsub object
+        self.pubsub = redis_client.pubsub()
+        
+        # Subscribe to all channels
+        await self.pubsub.subscribe(*channels)
+        
         for channel in channels:
-            await redis_client.subscribe(channel)
             print(f"📡 {self.agent_id} subscribed to: {channel}")
     
     def _get_agent_channels(self) -> List[str]:
@@ -70,9 +76,16 @@ class BaseAgent(ABC):
     
     async def _process_incoming_messages(self):
         """Process incoming Redis messages"""
-        # This would check Redis pub/sub for new messages
-        # For now, simulate message processing
-        pass
+        if not self.pubsub:
+            return
+        
+        message = await self.pubsub.get_message(ignore_subscribe_messages=True, timeout=0.01)
+        if message:
+            try:
+                data = json.loads(message["data"])
+                await self.process_message(data)
+            except Exception as e:
+                print(f"⚠️ Error processing message in {self.agent_id}: {e}")
     
     async def _check_scheduled_tasks(self):
         """Check for scheduled tasks that need to run"""

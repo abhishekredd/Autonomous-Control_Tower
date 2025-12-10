@@ -32,12 +32,15 @@ class CentralOrchestrator:
         self.risk_check_interval = 60  # seconds
         self.reporting_interval = 300  # seconds
         
+        # PubSub object
+        self.pubsub = redis_client.pubsub()
+        
     async def initialize(self):
         """Initialize the orchestrator"""
         print("🚀 Initializing Central Orchestrator...")
         
-        # Subscribe to Redis channels
-        await redis_client.subscribe(
+        # Subscribe to Redis channels via pubsub
+        await self.pubsub.subscribe(
             "shipment_created",
             "shipment_updated",
             "risk_detected",
@@ -257,81 +260,4 @@ class CentralOrchestrator:
     async def _escalate_to_human(self, shipment_id: int, risk_id: int,
                                simulations: List[Dict]):
         """Escalate decision to human operator"""
-        print(f"👨‍💼 Escalating risk {risk_id} to human operator")
-        
-        escalation_data = {
-            "shipment_id": shipment_id,
-            "risk_id": risk_id,
-            "simulations": simulations,
-            "timestamp": datetime.utcnow().isoformat(),
-            "reason": "Low confidence in automated mitigation"
-        }
-        
-        await redis_client.publish(
-            "human_escalation",
-            json.dumps(escalation_data)
-        )
-        
-        # Notify operations team
-        await self.communication_service.notify_operations_team(
-            message=f"Human review needed for shipment {shipment_id}",
-            data=escalation_data
-        )
-    
-    async def _load_active_shipments(self):
-        """Load active shipments from database"""
-        async with AsyncSessionLocal() as session:
-            from sqlalchemy import select
-            result = await session.execute(
-                select(Shipment).where(
-                    Shipment.status.in_([
-                        ShipmentStatus.IN_TRANSIT,
-                        ShipmentStatus.PENDING,
-                        ShipmentStatus.DELAYED
-                    ])
-                )
-            )
-            shipments = result.scalars().all()
-            
-            for shipment in shipments:
-                self.active_shipments[shipment.id] = {
-                    "tracking_number": shipment.tracking_number,
-                    "origin": shipment.origin,
-                    "destination": shipment.destination,
-                    "current_location": shipment.current_location,
-                    "current_port": shipment.current_port,
-                    "next_port": shipment.next_port,
-                    "estimated_arrival": shipment.estimated_arrival,
-                    "status": shipment.status.value,
-                    "mode": shipment.mode.value,
-                    "metadata": shipment.shipment_metadata or {}
-                }
-    
-    async def _get_port_congestion_level(self, port_code: str) -> float:
-        """Get congestion level for a port (simulated)"""
-        # In production, this would call an external API
-        congestion_data = {
-            "CNSHA": 0.8,  # Shanghai
-            "USLAX": 0.7,  # Los Angeles
-            "SGSIN": 0.4,  # Singapore
-            "NLRTM": 0.6,  # Rotterdam
-            "DEHAM": 0.5,  # Hamburg
-            "CNNGB": 0.3,  # Ningbo
-            "BEANR": 0.4,  # Antwerp
-            "JPTYO": 0.6,  # Tokyo
-        }
-        return congestion_data.get(port_code, 0.3)
-    
-    async def _process_redis_messages(self):
-        """Process incoming Redis messages"""
-        # This would process messages from Redis pub/sub
-        pass
-    
-    async def _assess_all_shipments_risks(self):
-        """Assess risks for all active shipments"""
-        # This would run comprehensive risk assessment
-        pass
-    
-    async def _update_risk_scores(self):
-        """Update risk scores for all shipments"""
-        pass
+        print
