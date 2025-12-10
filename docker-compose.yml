@@ -1,20 +1,4 @@
 services:
-  postgres:
-    image: timescale/timescaledb:latest-pg15
-    environment:
-      POSTGRES_USER: ${POSTGRES_USER:-user}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
-      POSTGRES_DB: ${POSTGRES_DB:-control_tower}
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init-db.sql
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-user}"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
 
   redis:
     image: redis:7-alpine
@@ -50,16 +34,16 @@ services:
       dockerfile: docker/Dockerfile.api
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     environment:
-      DATABASE_URL: postgresql://user:password@postgres:5432/control_tower
+      DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}"
       REDIS_URL: ${REDIS_URL}
       RABBITMQ_URL: ${RABBITMQ_URL}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
       SECRET_KEY: ${SECRET_KEY}
       DEBUG: ${DEBUG:-True}
     depends_on:
-      postgres:
-        condition: service_healthy
       redis:
         condition: service_healthy
       rabbitmq:
@@ -67,6 +51,7 @@ services:
     volumes:
       - .:/app
       - ./logs:/app/logs
+      - ./certs/ca.pem:/app/certs/ca.pem:ro   # mount CA cert
     command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
     restart: unless-stopped
 
@@ -74,8 +59,10 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.api
+    env_file:
+      - .env
     environment:
-      DATABASE_URL: postgresql://user:password@postgres:5432/control_tower
+      DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}"
       REDIS_URL: ${REDIS_URL}
       RABBITMQ_URL: ${RABBITMQ_URL}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
@@ -85,6 +72,7 @@ services:
       - rabbitmq
     volumes:
       - .:/app
+      - ./certs/ca.pem:/app/certs/ca.pem:ro   # mount CA cert
     command: celery -A app.core.celery_app worker --loglevel=info
     restart: unless-stopped
 
@@ -92,8 +80,10 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.api
+    env_file:
+      - .env
     environment:
-      DATABASE_URL: postgresql://user:password@postgres:5432/control_tower
+      DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}"
       REDIS_URL: ${REDIS_URL}
       RABBITMQ_URL: ${RABBITMQ_URL}
       OPENAI_API_KEY: ${OPENAI_API_KEY}
@@ -103,6 +93,7 @@ services:
       - rabbitmq
     volumes:
       - .:/app
+      - ./certs/ca.pem:/app/certs/ca.pem:ro   # mount CA cert
     command: celery -A app.core.celery_app beat --loglevel=info
     restart: unless-stopped
 
@@ -110,15 +101,17 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.mcp
+    env_file:
+      - .env
     environment:
       OPENAI_API_KEY: ${OPENAI_API_KEY}
-      DATABASE_URL: postgresql://user:password@postgres:5432/control_tower
+      DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}"
       REDIS_URL: ${REDIS_URL}
     depends_on:
-      - postgres
       - redis
     volumes:
       - .:/app
+      - ./certs/ca.pem:/app/certs/ca.pem:ro   # mount CA cert
     command: python -m app.mcp.servers.risk_detector
     restart: unless-stopped
 
@@ -126,14 +119,16 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.mcp
+    env_file:
+      - .env
     environment:
-      DATABASE_URL: postgresql://user:password@postgres:5432/control_tower
+      DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}"
       REDIS_URL: ${REDIS_URL}
     depends_on:
-      - postgres
       - redis
     volumes:
       - .:/app
+      - ./certs/ca.pem:/app/certs/ca.pem:ro   # mount CA cert
     command: python -m app.mcp.servers.route_optimizer
     restart: unless-stopped
 
@@ -141,15 +136,17 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.mcp
+    env_file:
+      - .env
     environment:
       OPENAI_API_KEY: ${OPENAI_API_KEY}
-      DATABASE_URL: postgresql://user:password@postgres:5432/control_tower
+      DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${POSTGRES_HOST}:${POSTGRES_PORT}/${POSTGRES_DB}"
       REDIS_URL: ${REDIS_URL}
     depends_on:
-      - postgres
       - redis
     volumes:
       - .:/app
+      - ./certs/ca.pem:/app/certs/ca.pem:ro   # mount CA cert
     command: python -m app.mcp.servers.stakeholder_comms
     restart: unless-stopped
 
@@ -168,6 +165,5 @@ services:
     restart: unless-stopped
 
 volumes:
-  postgres_data:
   redis_data:
   rabbitmq_data:
