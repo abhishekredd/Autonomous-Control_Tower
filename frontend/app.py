@@ -436,15 +436,19 @@ def shipments_page():
                     st.error("Please fill in all required fields (*)")
                 else:
                     shipment_data = {
-                        "shipment_id": shipment_id,
+                        "tracking_number": shipment_id,
+                        "reference_number": f"REF-{shipment_id}",
                         "origin": origin,
                         "destination": destination,
+                        "mode": transport_mode,
+                        "weight": 1000,  # or add a form field
+                        "volume": 10,    # or add a form field
+                        "value": float(estimated_value),
+                        "estimated_departure": scheduled_departure.isoformat(),
+                        "estimated_arrival": scheduled_arrival.isoformat(),
+                        "shipper": "Acme Corporation",  # or add a form field
                         "carrier": carrier,
-                        "transport_mode": transport_mode,
-                        "scheduled_departure": scheduled_departure.isoformat(),
-                        "scheduled_arrival": scheduled_arrival.isoformat(),
-                        "estimated_value": float(estimated_value),
-                        "status": "PENDING"
+                        "consignee": "Global Imports BV"  # or add a form field
                     }
                     
                     result = create_shipment(shipment_data)

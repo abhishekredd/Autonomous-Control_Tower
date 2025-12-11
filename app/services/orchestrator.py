@@ -10,6 +10,7 @@ from app.services.risk_service import RiskService
 from app.services.simulation_service import SimulationService
 from app.services.action_service import ActionService
 from app.services.communication_service import CommunicationService
+from sqlalchemy import select
 
 class CentralOrchestrator:
     """
@@ -261,3 +262,19 @@ class CentralOrchestrator:
                                simulations: List[Dict]):
         """Escalate decision to human operator"""
         print
+
+    async def _load_active_shipments(self):
+        """Load active shipments from the database into memory"""
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(Shipment).where(Shipment.status == ShipmentStatus.IN_TRANSIT)
+            )
+            shipments = result.scalars().all()
+
+            for shipment in shipments:
+                self.active_shipments[shipment.id] = {
+                    "shipment": shipment,
+                    "last_checked": datetime.utcnow(),
+                }
+
+        print(f"📦 Loaded {len(self.active_shipments)} active shipments")
