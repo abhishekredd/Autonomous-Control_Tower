@@ -1,14 +1,13 @@
+
 import streamlit as st
 import requests
 import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
-from datetime import datetime, timedelta
-import json
+from datetime import datetime
+import html
 import time
-from typing import Optional
 
-# Page config
 st.set_page_config(
     page_title="Autonomous Control Tower",
     page_icon="🚢",
@@ -16,929 +15,817 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# API Configuration
-API_BASE_URL = "http://api:8000"  # Change to localhost:8000 if running standalone
-WEBSOCKET_URL = "ws://api:8000/ws"  # For real-time updates
 
-# Session state initialization
-if 'token' not in st.session_state:
-    st.session_state.token = None
-if 'user' not in st.session_state:
-    st.session_state.user = None
-if 'current_page' not in st.session_state:
-    st.session_state.current_page = "Dashboard"
-if 'websocket_connection' not in st.session_state:
-    st.session_state.websocket_connection = None
+def styled_table(df, table_id=None):
+    """Return HTML for a DataFrame with premium-table class (no index)."""
 
-# ========== API Functions ==========
+    html_table = df.to_html(classes="premium-table", border=0, index=False, escape=False)
 
-def get_auth_headers() -> dict:
-    """Get authentication headers for API requests"""
-    if st.session_state.token:
-        return {"Authorization": f"Bearer {st.session_state.token}"}
-    return {}
+    if table_id:
+        html_table = html_table.replace('class="premium-table"', f'class="premium-table" id="{table_id}"')
+    return html_table
 
-def api_request(method: str, endpoint: str, data: Optional[dict] = None, params: Optional[dict] = None):
-    """Make API request with error handling"""
-    try:
-        url = f"{API_BASE_URL}{endpoint}"
-        headers = get_auth_headers()
-        
-        if method == "GET":
-            response = requests.get(url, headers=headers, params=params, timeout=10)
-        elif method == "POST":
-            response = requests.post(url, headers=headers, json=data, timeout=10)
-        elif method == "PUT":
-            response = requests.put(url, headers=headers, json=data, timeout=10)
-        elif method == "DELETE":
-            response = requests.delete(url, headers=headers, timeout=10)
-        else:
-            return None
-        
-        if response.status_code == 401:
-            st.error("Session expired. Please login again.")
-            st.session_state.token = None
-            st.session_state.user = None
-            st.rerun()
-        
-        return response
-    except requests.exceptions.ConnectionError:
-        st.error("⚠️ Cannot connect to API server. Please ensure backend is running.")
-        return None
-    except requests.exceptions.Timeout:
-        st.error("Request timeout. Please try again.")
-        return None
-    except Exception as e:
-        st.error(f"API Error: {str(e)}")
-        return None
 
-# ========== Data Fetching Functions ==========
+st.markdown(
+    """
+    <style>
 
-@st.cache_data(ttl=30)
-def fetch_dashboard_metrics():
-    """Fetch dashboard metrics from API"""
-    response = api_request("GET", "/api/v1/dashboard/metrics")
-    if response and response.status_code == 200:
-        return response.json()
-    return None
 
-@st.cache_data(ttl=60)
-def fetch_shipments(skip: int = 0, limit: int = 100, status: Optional[str] = None):
-    """Fetch shipments from API"""
-    params = {"skip": skip, "limit": limit}
-    if status:
-        params["status"] = status
-    
-    response = api_request("GET", "/api/v1/shipments", params=params)
-    if response and response.status_code == 200:
-        return response.json()
-    return []
 
-@st.cache_data(ttl=60)
-def fetch_risks(severity: Optional[str] = None):
-    """Fetch risks from API"""
-    params = {}
-    if severity:
-        params["severity"] = severity
-    
-    response = api_request("GET", "/api/v1/risks", params=params)
-    if response and response.status_code == 200:
-        return response.json()
-    return []
+    /* Title + underline */
+    .premium-header { 
+        font-size: 1.9rem; 
+        font-weight:700; 
+        color:#111827; 
+        margin:0 0 6px 0; 
+    }
+    .premium-underline { 
+        width:160px; height:5px; border-radius:6px;
+        background: linear-gradient(90deg,#6D28D9,#8B5CF6); 
+        margin-bottom:18px; 
+    }
 
-@st.cache_data(ttl=120)
-def fetch_shipment_details(shipment_id: int):
-    """Fetch detailed shipment information"""
-    response = api_request("GET", f"/api/v1/shipments/{shipment_id}")
-    if response and response.status_code == 200:
-        return response.json()
-    return None
+    /* Remove sidebar padding */
+    .sidebar .block-container {
+        padding-top: 0rem !important;
+    }
+    .alert-card {
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 14px;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+    border-left: 6px solid #8B5CF6;
+}
 
-def create_shipment(shipment_data: dict):
-    """Create new shipment via API"""
-    response = api_request("POST", "/api/v1/shipments", data=shipment_data)
-    if response and response.status_code == 200:
-        return response.json()
-    return None
+.alert-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #111827;
+}
 
-def run_simulation(simulation_data: dict):
-    """Run simulation via API"""
-    response = api_request("POST", "/api/v1/simulations", data=simulation_data)
-    if response and response.status_code == 200:
-        return response.json()
-    return None
+.alert-desc {
+    font-size: 0.9rem;
+    color: #4B5563;
+    margin-top: 4px;
+}
 
-# ========== Authentication Functions ==========
+.alert-location {
+    display: inline-block;
+    background: #F3F4F6;
+    padding: 4px 10px;
+    border-radius: 8px;
+    margin-top: 6px;
+    font-size: 0.8rem;
+    color: #374151;
+}
 
-def login(username: str, password: str) -> bool:
-    """Login to API and get token"""
-    try:
-        response = requests.post(
-            f"{API_BASE_URL}/auth/token",
-            data={"username": username, "password": password},
-            timeout=10
-        )
-        
-        if response.status_code == 200:
-            token_data = response.json()
-            st.session_state.token = token_data["access_token"]
-            st.session_state.user = {"username": username}
-            return True
-        else:
-            st.error("Invalid credentials")
-            return False
-    except:
-        # Fallback for development (without backend)
-        if username == "admin" and password == "secret":
-            st.session_state.token = "dev_token"
-            st.session_state.user = {"username": username}
-            st.info("⚠️ Using development mode (backend not connected)")
-            return True
-        st.error("Cannot connect to authentication server")
-        return False
+.alert-severity {
+    font-weight: 700;
+    font-size: 0.9rem;
+    padding: 6px 12px;
+    border-radius: 8px;
+}
 
-def logout():
-    """Clear session and logout"""
-    for key in list(st.session_state.keys()):
-        del st.session_state[key]
-    st.rerun()
+.alert-high { background:#FEE2E2; color:#B91C1C; }
+.alert-medium { background:#FEF3C7; color:#B45309; }
+.alert-critical { background:#FECACA; color:#7F1D1D; }
 
-# ========== Sidebar Navigation ==========
+.alert-time {
+    font-size: 0.8rem;
+    color: #6B7280;
+    margin-top: 6px;
+}
 
-def render_sidebar():
-    """Render sidebar navigation"""
-    with st.sidebar:
-        st.image("https://img.icons8.com/color/96/000000/container-ship.png", width=100)
-        st.title("Control Tower")
-        
-        # User info
-        if st.session_state.user:
-            st.success(f"✅ {st.session_state.user.get('username', 'User')}")
-            if st.button("🚪 Logout", use_container_width=True):
-                logout()
-        
-        st.divider()
-        
-        # Navigation menu
-        menu_items = {
-            "📊 Dashboard": "Dashboard",
-            "📦 Shipments": "Shipments",
-            "⚠️ Risks": "Risks",
-            "🔮 Simulations": "Simulations",
-            "🤖 MCP Agents": "MCP Agents",
-            "📈 Analytics": "Analytics",
-            "⚙️ Settings": "Settings"
+.alert-btn {
+    display:inline-block;
+    background: linear-gradient(90deg,#6D28D9,#8B5CF6);
+    padding: 8px 16px;
+    border-radius:8px;
+    color:white !important;
+    font-weight:600;
+    text-align:center;
+    margin-right:10px;
+    cursor:pointer;
+}
+.alert-btn:hover {
+    opacity:0.9;
+}
+
+
+
+
+    /* nav-btn will be added via JS into the shadow DOM so style it here */
+    .nav-btn {
+        width: 100% !important;
+        background: linear-gradient(90deg, #6D28D9, #7C3AED) !important;
+        color: white !important;
+        padding: 12px 16px !important;
+        border-radius: 10px !important;
+        font-weight: 600 !important;
+        border: none !important;
+        margin-bottom: 10px !important;
+        box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06) !important;
+        text-align: left !important;
+        cursor: pointer !important;
+        transition: transform .12s ease, box-shadow .12s ease;
+    }
+
+    .nav-btn:hover {
+        background: linear-gradient(90deg, #7C3AED, #8B5CF6) !important;
+        transform: translateY(-2px) scale(1.01);
+        box-shadow: 0 10px 30px rgba(99, 102, 241, 0.12) !important;
+    }
+
+    .nav-btn:active {
+        background: linear-gradient(90deg, #5B21B6, #6D28D9) !important;
+        transform: scale(0.99);
+    }
+
+    /* In case standard .stButton selector is reachable */
+    .sidebar .stButton>button {
+        width: 100% !important;
+    }
+  
+.shipment-mini-card {
+    background: linear-gradient(135deg, #ffffff 0%, #f5f3ff 100%);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+    box-shadow: 0 6px 18px rgba(109,40,217,0.12);
+    border-left: 6px solid #7C3AED;
+}
+
+.shipment-mini-title {
+    font-size: 0.90rem;
+    font-weight: 600;
+    color: #4B5563;
+    margin-bottom: 6px;
+}
+
+.shipment-mini-value {
+    font-size: 1.35rem;
+    font-weight: 800;
+    color: #111827;
+}
+
+.shipment-mini-delta {
+    font-size: 0.85rem;
+    margin-top: 6px;
+    font-weight: 600;
+}
+
+.shipment-delta-up {
+    color: #10B981;
+}
+
+.shipment-delta-down {
+    color: #EF4444;
+}
+
+.shipment-delta-neutral {
+    color: #6B7280;
+}
+
+
+
+
+.kpi-card {
+    background: linear-gradient(135deg, #4C1D95, #6D28D9, #8B5CF6, #A78BFA);
+    padding: 18px;
+    border-radius: 14px;
+    color: white !important;
+    box-shadow: 0 12px 28px rgba(88,28,135,0.35);
+    border: 1px solid rgba(255,255,255,0.18);
+    transition: transform .15s ease, box-shadow .15s ease;
+}
+.kpi-card:hover {
+    transform: translateY(-4px) scale(1.02);
+    box-shadow: 0 18px 42px rgba(124,58,237,0.45);
+}
+
+
+.kpi-card:hover {
+    transform: translateY(-4px) scale(1.02);
+    box-shadow: 0 14px 35px rgba(124,58,237,0.35);
+}
+
+.kpi-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: rgba(255, 255, 255, 0.95);
+    letter-spacing: 0.5px;
+    margin-bottom: 8px;
+}
+
+.kpi-value {
+    font-size: 2.1rem;
+    font-weight: 900;
+    color: #ffffff;
+    text-shadow: 0 0 6px rgba(255,255,255,0.55);
+}
+
+.kpi-delta {
+    font-size: 1rem;
+    margin-top: 8px;
+    font-weight: 700;
+}
+
+.delta-up {
+    color: #C6F6D5 !important; /* green highlight */
+    text-shadow: 0 0 6px rgba(16,185,129,0.6);
+}
+
+.delta-down {
+    color: #FECACA !important; /* red highlight */
+    text-shadow: 0 0 6px rgba(239,68,68,0.6);
+}
+
+.delta-neutral {
+    color: #E5E7EB !important; /* light gray */
+    text-shadow: 0 0 6px rgba(229,231,235,0.4);
+}
+
+
+    section[data-testid="stSidebar"] .stButton > button {
+    width: 100% !important;
+    background: linear-gradient(90deg, #6D28D9, #7C3AED) !important;
+    color: white !important;
+    padding: 12px 16px !important;
+    border-radius: 10px !important;
+    border: none !important;
+    font-weight: 600 !important;
+    margin-bottom: 10px !important;
+    text-align: left !important;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06) !important;
+    transition: 0.15s ease-in-out;
+}
+
+section[data-testid="stSidebar"] .stButton > button:hover {
+    background: linear-gradient(90deg, #7C3AED, #8B5CF6) !important;
+    transform: translateY(-2px);
+}
+
+section[data-testid="stSidebar"] .stButton > button:active {
+    background: linear-gradient(90deg, #5B21B6, #6D28D9) !important;
+    transform: scale(0.98);
+}
+
+
+
+    .activity-card {
+        background: linear-gradient(180deg,#ffffff,#fbfbfd);
+        border-radius: 10px;
+        padding: 10px;
+        box-shadow: 0 4px 12px rgba(2,6,23,0.06);
+        margin-bottom: 10px;
+        border-left: 6px solid #7C3AED;
+    }
+    .activity-title { font-weight:700; color:#111827; font-size:0.95rem; margin-bottom:4px; }
+    .activity-meta { color:#6B7280; font-size:0.88rem; }
+    .activity-time { color:#9CA3AF; font-size:0.82rem; }
+
+
+
+    table.premium-table {
+        border-collapse: collapse;
+        width: 100%;
+        border-radius: 10px;
+        overflow: hidden;
+        font-size: 0.95rem;
+        box-shadow: 0 6px 18px rgba(15, 23, 42, 0.03);
+    }
+
+    /* Header */
+    table.premium-table thead th {
+        background: linear-gradient(90deg,#6D28D9,#8B5CF6) !important;
+        color: white !important;
+        padding: 12px 14px !important;
+        font-weight: 700 !important;
+        border-bottom: 2px solid rgba(255,255,255,0.08) !important;
+        text-align: left !important;
+    }
+
+    /* Body rows */
+    table.premium-table tbody tr:nth-child(even) {
+        background: #F7F5FF;
+    }
+
+    table.premium-table tbody tr:hover {
+        background: #EFE9FF;
+    }
+
+    /* Cells */
+    table.premium-table td {
+        padding: 10px 14px;
+        border-bottom: 1px solid #F1F2F4;
+        color: #374151;
+    }
+
+    /* small responsive tweaks */
+    @media (max-width: 800px) {
+        table.premium-table thead th, table.premium-table td {
+            padding: 8px 10px;
+            font-size: 0.9rem;
         }
-        
-        for icon_text, page_name in menu_items.items():
-            if st.button(icon_text, 
-                        use_container_width=True,
-                        type="primary" if st.session_state.current_page == page_name else "secondary"):
-                st.session_state.current_page = page_name
-                st.rerun()
-        
-        st.divider()
-        
-        # System status
-        st.subheader("System Status")
-        col1, col2 = st.columns(2)
-        with col1:
-            status_color = "🟢" if st.session_state.token else "🔴"
-            st.write(f"API: {status_color}")
-        with col2:
-            st.write("DB: 🟢")
-        
-        st.divider()
-        
-        # Quick actions
-        st.subheader("Quick Actions")
-        if st.button("🔄 Refresh All", use_container_width=True):
-            st.cache_data.clear()
-            st.rerun()
-        if st.button("📊 Generate Report", use_container_width=True):
-            st.info("Report generation started...")
-        
-        st.divider()
-        st.caption(f"v1.0.0 | {datetime.now().strftime('%H:%M:%S')}")
+        .premium-header { font-size: 1.4rem; }
+    }
 
-# ========== Page Components ==========
+ 
 
-def dashboard_page():
-    """Dashboard page with real-time metrics"""
-    st.title("📊 Control Tower Dashboard")
-    
-    # Fetch metrics
-    metrics = fetch_dashboard_metrics()
-    
-    # Display metrics
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric(
-            "Active Shipments",
-            metrics.get("active_shipments", 0) if metrics else 0,
-            delta="+12" if metrics else None
-        )
-    with col2:
-        st.metric(
-            "High Risk",
-            metrics.get("high_risk", 0) if metrics else 0,
-            delta="+3" if metrics else None,
-            delta_color="inverse"
-        )
-    with col3:
-        st.metric(
-            "On-Time Rate",
-            f"{metrics.get('on_time_rate', 0)}%" if metrics else "0%",
-            delta="+2%" if metrics else None
-        )
-    with col4:
-        st.metric(
-            "Total Value",
-            f"${metrics.get('total_value', 0):,}" if metrics else "$0",
-            delta="+$250K" if metrics else None
-        )
-    
-    # Charts section
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("🌍 Shipment Locations")
-        shipments = fetch_shipments(limit=20)
-        
-        if shipments:
-            # Prepare map data
-            map_data = []
-            for shipment in shipments:
-                if shipment.get('current_latitude') and shipment.get('current_longitude'):
-                    map_data.append({
-                        'lat': shipment['current_latitude'],
-                        'lon': shipment['current_longitude'],
-                        'shipment': shipment.get('shipment_id', 'Unknown'),
-                        'status': shipment.get('status', 'Unknown'),
-                        'risk': shipment.get('risk_score', 0)
-                    })
-            
-            if map_data:
-                df = pd.DataFrame(map_data)
-                fig = px.scatter_mapbox(
-                    df,
-                    lat='lat',
-                    lon='lon',
-                    hover_name='shipment',
-                    hover_data=['status', 'risk'],
-                    color='status',
-                    size_max=15,
-                    zoom=1,
-                    height=400
-                )
-                fig.update_layout(mapbox_style="carto-positron")
-                st.plotly_chart(fig, use_container_width=True)
-            else:
-                st.info("No location data available")
-        else:
-            st.info("No shipments found")
-    
-    with col2:
-        st.subheader("📊 Risk Distribution")
-        risks = fetch_risks()
-        
-        if risks:
-            df_risks = pd.DataFrame(risks)
-            risk_counts = df_risks['severity'].value_counts()
-            
-            fig = px.pie(
-                values=risk_counts.values,
-                names=risk_counts.index,
-                color=risk_counts.index,
-                color_discrete_map={
-                    'HIGH': '#DC2626',
-                    'MEDIUM': '#F59E0B',
-                    'LOW': '#10B981'
-                }
-            )
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("No risks detected")
-    
-    # Recent activities
-    st.subheader("🔄 Recent Activities")
-    
-    # Fetch recent shipments
-    recent_shipments = fetch_shipments(limit=10)
-    if recent_shipments:
-        activities = []
-        for shipment in recent_shipments:
-            activities.append({
-                'Shipment': shipment.get('shipment_id'),
-                'Status': shipment.get('status'),
-                'Risk Score': f"{shipment.get('risk_score', 0):.1f}",
-                'Last Updated': shipment.get('updated_at', 'N/A')
-            })
-        
-        df_activities = pd.DataFrame(activities)
-        st.dataframe(df_activities, use_container_width=True, hide_index=True)
-    else:
-        st.info("No recent activities")
+    .shipment-detail-card {
+        background: linear-gradient(90deg, rgba(109,40,217,0.95), rgba(124,58,237,0.95));
+        color: white;
+        padding: 16px;
+        border-radius: 12px;
+        box-shadow: 0 12px 30px rgba(99,102,241,0.12);
+        margin-bottom: 12px;
+    }
 
-def shipments_page():
-    """Shipments management page"""
-    st.title("📦 Shipment Management")
-    
-    # Tabs for different views
-    tab1, tab2, tab3 = st.tabs(["All Shipments", "Create Shipment", "Track Shipment"])
-    
-    with tab1:
-        # Filters
-        col1, col2 = st.columns(2)
-        with col1:
-            search_term = st.text_input("Search shipments")
-        with col2:
-            status_filter = st.selectbox(
-                "Filter by status",
-                ["ALL", "IN_TRANSIT", "DELAYED", "DELIVERED", "CANCELLED", "PENDING"]
-            )
-        
-        # Fetch shipments
-        shipments = fetch_shipments()
-        
-        if shipments:
-            df = pd.DataFrame(shipments)
-            
-            # Apply filters
-            if search_term:
-                df = df[df['shipment_id'].str.contains(search_term, case=False) |
-                       df['origin'].str.contains(search_term, case=False) |
-                       df['destination'].str.contains(search_term, case=False)]
-            
-            if status_filter != "ALL":
-                df = df[df['status'] == status_filter]
-            
-            # Display shipments
-            st.dataframe(
-                df[['shipment_id', 'origin', 'destination', 'status', 'risk_score', 'estimated_value']],
-                use_container_width=True,
-                hide_index=True
-            )
-            
-            # Shipment details
-            if not df.empty:
-                selected_id = st.selectbox(
-                    "Select shipment for details",
-                    df['shipment_id'].tolist()
-                )
-                
-                if selected_id:
-                    shipment_details = fetch_shipment_details(
-                        next(s['id'] for s in shipments if s['shipment_id'] == selected_id)
-                    )
-                    
-                    if shipment_details:
-                        with st.expander(f"Details for {selected_id}", expanded=True):
-                            col1, col2 = st.columns(2)
-                            with col1:
-                                st.metric("Status", shipment_details.get('status', 'N/A'))
-                                st.metric("Origin", shipment_details.get('origin', 'N/A'))
-                                st.metric("Destination", shipment_details.get('destination', 'N/A'))
-                                st.metric("Carrier", shipment_details.get('carrier', 'N/A'))
-                            with col2:
-                                st.metric("Risk Score", f"{shipment_details.get('risk_score', 0):.1f}/10")
-                                st.metric("Value", f"${shipment_details.get('estimated_value', 0):,}")
-                                st.metric("Mode", shipment_details.get('transport_mode', 'N/A'))
-                                st.metric("Last Updated", shipment_details.get('updated_at', 'N/A').split('T')[0])
-        else:
-            st.info("No shipments found")
-    
-    with tab2:
-        st.subheader("Create New Shipment")
-        
-        with st.form("create_shipment_form"):
-            col1, col2 = st.columns(2)
-            
-            with col1:
-                shipment_id = st.text_input("Shipment ID*", 
-                                          value=f"SH{datetime.now().strftime('%Y%m%d%H%M')}")
-                origin = st.text_input("Origin*", "Shanghai, China")
-                destination = st.text_input("Destination*", "Rotterdam, Netherlands")
-                carrier = st.selectbox("Carrier*", 
-                                     ["MAERSK", "CMA CGM", "MSC", "COSCO", "HAPAG-LLOYD"])
-            
-            with col2:
-                transport_mode = st.selectbox("Transport Mode*", ["SEA", "AIR", "RAIL", "ROAD"])
-                estimated_value = st.number_input("Estimated Value (USD)*", 
-                                                 min_value=1000, value=50000, step=1000)
-                scheduled_departure = st.date_input("Scheduled Departure*")
-                scheduled_arrival = st.date_input("Scheduled Arrival*")
-            
-            submitted = st.form_submit_button("Create Shipment", type="primary")
-            
-            if submitted:
-                if not all([shipment_id, origin, destination]):
-                    st.error("Please fill in all required fields (*)")
-                else:
-                    shipment_data = {
-                        "tracking_number": shipment_id,
-                        "reference_number": f"REF-{shipment_id}",
-                        "origin": origin,
-                        "destination": destination,
-                        "mode": transport_mode,
-                        "weight": 1000,  # or add a form field
-                        "volume": 10,    # or add a form field
-                        "value": float(estimated_value),
-                        "estimated_departure": scheduled_departure.isoformat(),
-                        "estimated_arrival": scheduled_arrival.isoformat(),
-                        "shipper": "Acme Corporation",  # or add a form field
-                        "carrier": carrier,
-                        "consignee": "Global Imports BV"  # or add a form field
-                    }
-                    
-                    result = create_shipment(shipment_data)
-                    if result:
-                        st.success(f"Shipment {shipment_id} created successfully!")
-                        st.balloons()
-                    else:
-                        st.error("Failed to create shipment")
-    
-    with tab3:
-        st.subheader("Track Shipment")
-        
-        shipment_id = st.text_input("Enter Shipment ID")
-        
-        if shipment_id:
-            # In a real implementation, you would fetch real-time tracking data
-            st.info("Real-time tracking would be implemented with WebSocket connection")
-            
-            # Simulated tracking data
-            tracking_data = {
-                "current_location": "Pacific Ocean",
-                "coordinates": "35.6895° N, 139.6917° E",
-                "status": "IN_TRANSIT",
-                "progress": 65,
-                "next_port": "Los Angeles",
-                "eta": "2024-01-20",
-                "distance_covered": "8,450 km",
-                "distance_remaining": "4,550 km"
+    .shipment-detail-title { font-weight:800; font-size:1.05rem; margin-bottom:8px; }
+    .shipment-detail-meta { font-size:0.95rem; color: rgba(255,255,255,0.92); margin-bottom:6px; }
+    .shipment-metric { display:inline-block; background: rgba(255,255,255,0.08); padding:6px 10px; border-radius:8px; margin-right:8px; font-weight:700; }
+
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+if 'page' not in st.session_state:
+    st.session_state.page = "Dashboard"
+
+def nav_button(label, page_key):
+    if st.sidebar.button(label, key=f"nav_{page_key}"):
+        st.session_state.page = page_key
+        st.rerun()
+
+
+
+# -------- Sidebar --------
+st.sidebar.markdown("<h3 style='text-align:center;margin-bottom:6px'>🚢 Control Tower</h3>", unsafe_allow_html=True)
+st.sidebar.markdown("<hr/>", unsafe_allow_html=True)
+
+nav_button("📊 Dashboard", "Dashboard")
+nav_button("🚢 Shipments", "Shipments")
+nav_button("⚠️ Risks", "Risks")
+nav_button("🔮 Simulations", "Simulations")
+nav_button("👥 Digital Twin", "Digital Twin")
+
+st.sidebar.markdown("<hr/>", unsafe_allow_html=True)
+st.sidebar.subheader("Real-time Controls")
+auto_refresh = st.sidebar.checkbox("Auto-refresh", value=True)
+refresh_rate = st.sidebar.slider("Refresh rate (seconds)", 5, 60, 30)
+
+if st.sidebar.button("🔄 Manual Refresh"):
+    st.experimental_rerun()
+
+st.sidebar.markdown("<hr/>", unsafe_allow_html=True)
+st.sidebar.subheader("System Status")
+st.sidebar.progress(0.85, text="Operational: 85%")
+st.sidebar.caption("Last updated: " + datetime.now().strftime("%H:%M:%S"))
+
+# ------------------ DASHBOARD PAGE ------------------
+if st.session_state.page == "Dashboard":
+
+
+    st.markdown("""
+        <h1 style="
+            text-align:center;
+            font-weight:900;
+            font-size:2.3rem;
+            color:#1f2937;
+            margin-bottom:6px;">
+            Autonomous Control Tower Dashboard
+        </h1>
+        <div style="height:4px; width: 1500px; background:#6366F1; margin:0 auto 28px auto; border-radius:6px;"></div>
+    """, unsafe_allow_html=True)
+
+  
+    st.markdown("""
+        <div style="font-size:1.45rem; font-weight:800; display:flex; align-items:center;">
+            <div style="width:4px; height:27px; background:#7C3AED; border-radius:4px; margin-right:8px;"></div>
+            Key Performance Indicators
+        </div>
+        <br/>
+    """, unsafe_allow_html=True)
+
+   
+    k1, k2, k3, k4 = st.columns(4)
+
+    with k1:
+        st.markdown("""
+            <div class='kpi-card'>
+                <div class='kpi-title'>Total Shipments</div>
+                <div class='kpi-value'>1,428</div>
+                <div class='kpi-delta delta-up'>▲ +12% this month</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    with k2:
+        st.markdown("""
+            <div class='kpi-card'>
+                <div class='kpi-title'>Risk Detection</div>
+                <div class='kpi-value'>94%</div>
+                <div class='kpi-delta delta-neutral'>Accuracy rate</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    with k3:
+        st.markdown("""
+            <div class='kpi-card'>
+                <div class='kpi-title'>Cost Savings</div>
+                <div class='kpi-value'>$1.2M</div>
+                <div class='kpi-delta delta-up'>▲ Year to date</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    with k4:
+        st.markdown("""
+            <div class='kpi-card'>
+                <div class='kpi-title'>Auto Actions</div>
+                <div class='kpi-value'>847</div>
+                <div class='kpi-delta delta-neutral'>Executed this month</div>
+            </div>
+        """, unsafe_allow_html=True)
+
+    st.markdown("<br/>", unsafe_allow_html=True)
+
+    # ======================================================
+    #                 MAP + RECENT ACTIVITY
+    # ======================================================
+
+    map_col, activity_col = st.columns([2.3, 1])
+
+    # ---------------- MAP LEFT ----------------
+    with map_col:
+        st.markdown("""
+            <div style="font-size:1.45rem; font-weight:800; display:flex; align-items:center;">
+                <div style="width:4px; height:27px; background:#10B981; border-radius:4px; margin-right:8px;"></div>
+                🌍 Global Shipment Tracking
+            </div>
+            <br/>
+        """, unsafe_allow_html=True)
+
+        shipments = pd.DataFrame({
+            'Shipment': ['SH-001', 'SH-002', 'SH-003', 'SH-004'],
+            'Origin': ['Shanghai', 'Rotterdam', 'Singapore', 'Los Angeles'],
+            'Destination': ['Rotterdam', 'New York', 'Dubai', 'Tokyo'],
+            'Status': ['In Transit', 'Delayed', 'On Time', 'In Transit'],
+            'Risk': ['High', 'Critical', 'Low', 'Medium'],
+            'Lat': [31.2304, 51.9244, 1.3521, 34.0522],
+            'Lon': [121.4737, 4.4777, 103.8198, -118.2437]
+        })
+
+        fig = px.scatter_mapbox(
+            shipments,
+            lat="Lat",
+            lon="Lon",
+            hover_name="Shipment",
+            hover_data=["Origin", "Destination", "Status"],
+            color="Risk",
+            size=[20, 25, 15, 20],
+            zoom=1.2,
+            height=520,
+            color_discrete_map={
+                "High": "red",
+                "Critical": "darkred",
+                "Medium": "orange",
+                "Low": "green"
             }
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.metric("Current Location", tracking_data["current_location"])
-                st.metric("Status", tracking_data["status"])
-                st.metric("Progress", f"{tracking_data['progress']}%")
-                st.progress(tracking_data["progress"] / 100)
-            
-            with col2:
-                st.metric("Next Port", tracking_data["next_port"])
-                st.metric("ETA", tracking_data["eta"])
-                st.metric("Distance Covered", tracking_data["distance_covered"])
-                st.metric("Distance Remaining", tracking_data["distance_remaining"])
-
-def risks_page():
-    """Risk management page"""
-    st.title("⚠️ Risk Management")
-    
-    # Fetch risks
-    risks = fetch_risks()
-    
-    if risks:
-        # Risk metrics
-        col1, col2, col3 = st.columns(3)
-        
-        high_risks = len([r for r in risks if r.get('severity') == 'HIGH'])
-        medium_risks = len([r for r in risks if r.get('severity') == 'MEDIUM'])
-        active_risks = len([r for r in risks if r.get('status') == 'ACTIVE'])
-        
-        with col1:
-            st.metric("Active Risks", active_risks)
-        with col2:
-            st.metric("High Severity", high_risks, delta_color="inverse")
-        with col3:
-            st.metric("Medium Severity", medium_risks)
-        
-        # Risks table
-        st.subheader("Active Risks")
-        
-        df_risks = pd.DataFrame(risks)
-        st.dataframe(
-            df_risks[['id', 'shipment_id', 'risk_type', 'severity', 'probability', 'impact_score', 'status']],
-            use_container_width=True,
-            hide_index=True
         )
-        
-        # Risk details
-        if not df_risks.empty:
-            selected_risk = st.selectbox(
-                "Select risk for details",
-                df_risks['id'].tolist(),
-                format_func=lambda x: f"Risk {x}"
-            )
-            
-            risk_details = next((r for r in risks if r['id'] == selected_risk), None)
-            
-            if risk_details:
-                with st.expander(f"Risk Details - ID: {selected_risk}", expanded=True):
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        st.write(f"**Risk Type:** {risk_details.get('risk_type', 'N/A')}")
-                        st.write(f"**Severity:** {risk_details.get('severity', 'N/A')}")
-                        st.write(f"**Probability:** {risk_details.get('probability', 0):.2f}")
-                        st.write(f"**Impact Score:** {risk_details.get('impact_score', 0)}")
-                    
-                    with col2:
-                        st.write(f"**Status:** {risk_details.get('status', 'N/A')}")
-                        st.write(f"**Detected:** {risk_details.get('detected_at', 'N/A')}")
-                        st.write(f"**Description:** {risk_details.get('description', 'N/A')}")
-                    
-                    # Mitigation actions
-                    st.subheader("Mitigation Actions")
-                    
-                    col1, col2, col3 = st.columns(3)
-                    with col1:
-                        if st.button("🔄 Reroute", use_container_width=True):
-                            st.info("Reroute action triggered")
-                    with col2:
-                        if st.button("⚡ Expedite", use_container_width=True):
-                            st.info("Expedite action triggered")
-                    with col3:
-                        if st.button("📧 Notify", use_container_width=True):
-                            st.info("Notification sent to stakeholders")
-    else:
-        st.info("No risks detected")
 
-def simulations_page():
-    """Simulations page"""
-    st.title("🔮 Mitigation Simulations")
-    
-    # Simulation controls
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("Risk Simulation")
-        
-        with st.form("risk_simulation_form"):
-            risk_type = st.selectbox(
-                "Risk Scenario",
-                ["PORT_CONGESTION", "CUSTOMS_DELAY", "WEATHER", "LABOR_STRIKE", "EQUIPMENT_FAILURE"]
-            )
-            severity = st.slider("Severity Level", 1, 10, 5)
-            duration_hours = st.number_input("Duration (hours)", min_value=1, max_value=720, value=24)
-            
-            submitted = st.form_submit_button("Run Simulation", type="primary")
-            
-            if submitted:
-                simulation_data = {
-                    "simulation_type": "RISK_IMPACT",
-                    "parameters": {
-                        "risk_type": risk_type,
-                        "severity": severity,
-                        "duration_hours": duration_hours
-                    }
-                }
-                
-                result = run_simulation(simulation_data)
-                if result:
-                    st.success("Simulation started!")
-                    st.json(result)
-                else:
-                    st.error("Failed to run simulation")
-    
-    with col2:
-        st.subheader("Mitigation Options")
-        
-        with st.form("mitigation_simulation_form"):
-            action_type = st.selectbox(
-                "Action Type",
-                ["RE_ROUTE", "MODE_SWITCH", "EXPEDITE", "HOLD", "INSURANCE_CLAIM"]
-            )
-            cost_limit = st.number_input("Cost Limit (USD)", min_value=0, value=10000)
-            time_constraint = st.number_input("Time Constraint (hours)", min_value=0, value=48)
-            
-            submitted = st.form_submit_button("Simulate Action", type="primary")
-            
-            if submitted:
-                simulation_data = {
-                    "simulation_type": "MITIGATION",
-                    "parameters": {
-                        "action_type": action_type,
-                        "cost_limit": cost_limit,
-                        "time_constraint": time_constraint
-                    }
-                }
-                
-                result = run_simulation(simulation_data)
-                if result:
-                    st.success("Action simulation started!")
-                    st.json(result)
-                else:
-                    st.error("Failed to run simulation")
-    
-    # Simulation results
-    st.subheader("Recent Simulations")
-    
-    # Mock simulation results
-    simulations = [
-        {
-            "id": 1,
-            "type": "RISK_IMPACT",
-            "status": "COMPLETED",
-            "result": "High impact detected",
-            "created_at": "2024-01-10 10:30:00"
-        },
-        {
-            "id": 2,
-            "type": "MITIGATION",
-            "status": "COMPLETED",
-            "result": "Optimal route found",
-            "created_at": "2024-01-10 09:15:00"
-        },
-        {
-            "id": 3,
-            "type": "RISK_IMPACT",
-            "status": "RUNNING",
-            "result": "In progress",
-            "created_at": "2024-01-10 11:45:00"
-        }
-    ]
-    
-    df_simulations = pd.DataFrame(simulations)
-    st.dataframe(df_simulations, use_container_width=True, hide_index=True)
-
-def mcp_agents_page():
-    """MCP Agents monitoring page"""
-    st.title("🤖 MCP Agent Network")
-    
-    # Agent status
-    agents = [
-        {
-            "name": "Central Orchestrator",
-            "status": "ACTIVE",
-            "cpu": "15%",
-            "memory": "512MB",
-            "messages": "1,425",
-            "uptime": "7d 12h"
-        },
-        {
-            "name": "Risk Detector",
-            "status": "ACTIVE",
-            "cpu": "8%",
-            "memory": "256MB",
-            "messages": "892",
-            "uptime": "7d 12h"
-        },
-        {
-            "name": "Route Optimizer",
-            "status": "ACTIVE",
-            "cpu": "12%",
-            "memory": "384MB",
-            "messages": "764",
-            "uptime": "7d 12h"
-        },
-        {
-            "name": "Stakeholder Comms",
-            "status": "ACTIVE",
-            "cpu": "6%",
-            "memory": "192MB",
-            "messages": "543",
-            "uptime": "7d 12h"
-        },
-        {
-            "name": "Simulation Engine",
-            "status": "ACTIVE",
-            "cpu": "22%",
-            "memory": "768MB",
-            "messages": "672",
-            "uptime": "7d 12h"
-        },
-        {
-            "name": "Action Executor",
-            "status": "ACTIVE",
-            "cpu": "9%",
-            "memory": "320MB",
-            "messages": "456",
-            "uptime": "7d 12h"
-        }
-    ]
-    
-    df_agents = pd.DataFrame(agents)
-    st.dataframe(df_agents, use_container_width=True, hide_index=True)
-    
-    # Agent communication flow
-    st.subheader("📡 Agent Communication Flow")
-    
-    messages = [
-        {
-            "time": "10:30:01",
-            "from": "Risk Detector",
-            "to": "Orchestrator",
-            "message": "Risk detected: Port congestion",
-            "context": "SH-001"
-        },
-        {
-            "time": "10:30:03",
-            "from": "Orchestrator",
-            "to": "Simulation Engine",
-            "message": "Simulate mitigation options",
-            "context": "SH-001"
-        },
-        {
-            "time": "10:30:05",
-            "from": "Simulation Engine",
-            "to": "Orchestrator",
-            "message": "3 options simulated, best: reroute",
-            "context": "SH-001"
-        },
-        {
-            "time": "10:30:07",
-            "from": "Orchestrator",
-            "to": "Action Executor",
-            "message": "Execute reroute action",
-            "context": "SH-001"
-        },
-        {
-            "time": "10:30:10",
-            "from": "Action Executor",
-            "to": "Orchestrator",
-            "message": "Action completed successfully",
-            "context": "SH-001"
-        }
-    ]
-    
-    df_messages = pd.DataFrame(messages)
-    st.dataframe(df_messages, use_container_width=True, hide_index=True)
-
-def analytics_page():
-    """Analytics page"""
-    st.title("📈 Analytics & Insights")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.subheader("Performance Metrics")
-        
-        # Fetch metrics from API
-        metrics = fetch_dashboard_metrics()
-        
-        if metrics:
-            st.metric("On-Time Delivery", f"{metrics.get('on_time_rate', 0)}%")
-            st.metric("Cost Efficiency", f"{metrics.get('cost_efficiency', 0)}%")
-            st.metric("Risk Mitigation", f"{metrics.get('risk_mitigation', 0)}%")
-            st.metric("Customer Satisfaction", f"{metrics.get('customer_satisfaction', 0)}%")
-        else:
-            # Fallback metrics
-            st.metric("On-Time Delivery", "87%", "+2%")
-            st.metric("Cost Efficiency", "92%", "+3%")
-            st.metric("Risk Mitigation", "78%", "+5%")
-            st.metric("Customer Satisfaction", "88%", "+1%")
-    
-    with col2:
-        st.subheader("Trend Analysis")
-        
-        # Generate sample trend data
-        import numpy as np
-        np.random.seed(42)
-        
-        months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun']
-        risk_scores = np.random.randint(30, 70, 6)
-        delivery_times = np.random.randint(5, 20, 6)
-        
-        fig = go.Figure()
-        fig.add_trace(go.Scatter(
-            x=months, 
-            y=risk_scores, 
-            name='Risk Score',
-            line=dict(color='red')
-        ))
-        fig.add_trace(go.Scatter(
-            x=months, 
-            y=delivery_times, 
-            name='Avg Delivery (days)',
-            line=dict(color='blue'),
-            yaxis='y2'
-        ))
-        
         fig.update_layout(
-            title='Risk vs Delivery Time Trends',
-            yaxis=dict(title='Risk Score'),
-            yaxis2=dict(title='Delivery Days', overlaying='y', side='right')
+            mapbox_style="open-street-map",
+            margin=dict(l=0, r=0, t=0, b=0)
         )
-        
+
         st.plotly_chart(fig, use_container_width=True)
 
-def settings_page():
-    """Settings page"""
-    st.title("⚙️ System Settings")
-    
-    tab1, tab2, tab3 = st.tabs(["API Configuration", "Notifications", "User Management"])
-    
-    with tab1:
-        st.subheader("API Configuration")
-        
-        with st.form("api_config_form"):
-            api_url = st.text_input("API Base URL", value=API_BASE_URL)
-            api_timeout = st.number_input("API Timeout (seconds)", min_value=5, max_value=60, value=10)
-            
-            if st.form_submit_button("Save Configuration", type="primary"):
-                st.success("Configuration saved!")
-    
-    with tab2:
-        st.subheader("Notification Settings")
-        
-        email_notifications = st.checkbox("Email notifications", value=True)
-        sms_alerts = st.checkbox("SMS alerts", value=False)
-        webhook_integrations = st.checkbox("Webhook integrations", value=False)
-        
-        alert_threshold = st.select_slider(
-            "Alert Threshold",
-            options=["LOW", "MEDIUM", "HIGH", "CRITICAL"],
-            value="MEDIUM"
-        )
-        
-        if st.button("Update Notifications", type="primary"):
-            st.success("Notification settings updated!")
-    
-    with tab3:
-        st.subheader("User Management")
-        
-        if st.session_state.user:
-            st.write(f"**Current User:** {st.session_state.user.get('username', 'N/A')}")
-            st.write(f"**Role:** Administrator")
-        
-        with st.expander("Change Password"):
-            current_pw = st.text_input("Current Password", type="password")
-            new_pw = st.text_input("New Password", type="password")
-            confirm_pw = st.text_input("Confirm Password", type="password")
-            
-            if st.button("Update Password", type="primary"):
-                if new_pw == confirm_pw:
-                    st.success("Password updated successfully!")
-                else:
-                    st.error("Passwords do not match")
+    # ---------------- RECENT ACTIVITY RIGHT ----------------
+    with activity_col:
 
-# ========== Login Page ==========
+        st.markdown("""
+            <div style="font-size:1.2rem; font-weight:800; display:flex; align-items:center;">
+                <div style="width:6px; height:22px; background:#7C3AED; border-radius:4px; margin-right:8px;"></div>
+                📋 Recent Activity
+            </div>
+            <br/>
+        """, unsafe_allow_html=True)
 
-def login_page():
-    """Render login page"""
-    st.title("🚢 Autonomous Control Tower")
-    st.markdown("---")
-    
-    col1, col2 = st.columns([1, 2])
-    
-    with col1:
-        st.image("https://img.icons8.com/color/96/000000/container-ship.png", width=150)
-    
-    with col2:
-        st.subheader("Sign in to your account")
-        
-        with st.form("login_form"):
-            username = st.text_input("Username", placeholder="Enter your username")
-            password = st.text_input("Password", type="password", placeholder="Enter your password")
-            
-            submit = st.form_submit_button("Login", type="primary", use_container_width=True)
-            
-            if submit:
-                if login(username, password):
-                    st.success("Login successful!")
-                    time.sleep(1)
-                    st.rerun()
-        
-        st.markdown("---")
-        st.caption("Default credentials: admin / secret")
-        
-        # Development mode toggle
-        if st.checkbox("Enable development mode (no backend required)"):
-            st.info("Development mode enabled. Using mock data.")
+        recent = [
+            ("10:30", "SH-001", "Rerouted via alternate port", "Route Optimizer"),
+            ("10:25", "SH-045", "Customs clearance expedited", "Action Executor"),
+            ("10:20", "SH-089", "Risk detected: Port congestion", "Risk Detector"),
+            ("10:15", "SH-112", "Mode switched to air freight", "Action Executor"),
+            ("10:10", "SH-156", "Stakeholders notified of delay", "Stakeholder Comms"),
+        ]
 
-# ========== Main App Logic ==========
+        for t, ship, act, agent in recent:
+            st.markdown(
+                f"""
+                <div class='activity-card'>
+                    <div style='display:flex;justify-content:space-between;align-items:center;'>
+                        <div>
+                            <div class='activity-title'>{act}</div>
+                            <div class='activity-meta'>{ship} • {agent}</div>
+                        </div>
+                        <div class='activity-time'>{t}</div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True)
 
-def main():
-    """Main application logic"""
-    
-    # Check authentication
-    if not st.session_state.token:
-        login_page()
-        return
-    
-    # Render sidebar
-    render_sidebar()
-    
-    # Render current page
-    if st.session_state.current_page == "Dashboard":
-        dashboard_page()
-    elif st.session_state.current_page == "Shipments":
-        shipments_page()
-    elif st.session_state.current_page == "Risks":
-        risks_page()
-    elif st.session_state.current_page == "Simulations":
-        simulations_page()
-    elif st.session_state.current_page == "MCP Agents":
-        mcp_agents_page()
-    elif st.session_state.current_page == "Analytics":
-        analytics_page()
-    elif st.session_state.current_page == "Settings":
-        settings_page()
-    
-    # Footer
-    st.divider()
-    st.caption(f"Autonomous Control Tower v1.0 | Last updated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
 
-if __name__ == "__main__":
-    main()
+
+
+
+elif st.session_state.page == "Shipments":
+    st.markdown("<div class='premium-header'>📦 Shipment Management</div>", unsafe_allow_html=True)
+    st.markdown("<div class='premium-underline'></div>", unsafe_allow_html=True)
+
+    # Search + Filters row (visual only - functionality preserved)
+    s1, s2, s3, s4 = st.columns([2,1,1,1])
+    with s1:
+        search_term = st.text_input("Search Shipments", placeholder="Container #, Booking #")
+    with s2:
+        status_filter = st.selectbox("Status", ["All", "In Transit", "On Time", "Delayed", "Critical", "Completed", "Pending"])
+    with s3:
+        carrier_filter = st.selectbox("Mode", ["All", "Sea", "Air", "Rail"])
+    with s4:
+        if st.button("🔍 Apply Filters", use_container_width=True):
+            st.experimental_rerun()
+
+    st.markdown("<br/>", unsafe_allow_html=True)
+    st.markdown("<div class='section-title'>Active Shipments</div>", unsafe_allow_html=True)
+
+    shipments_data = pd.DataFrame({
+        'ID': ['SH-001', 'SH-002', 'SH-003', 'SH-004', 'SH-005'],
+        'Tracking': ['TRK789012', 'TRK789013', 'TRK789014', 'TRK789015', 'TRK789016'],
+        'Origin': ['Shanghai', 'Rotterdam', 'Singapore', 'Los Angeles', 'Hamburg'],
+        'Destination': ['Rotterdam', 'New York', 'Dubai', 'Tokyo', 'Shanghai'],
+        'Status': ['In Transit', 'Delayed', 'On Time', 'In Transit', 'Pending'],
+        'Mode': ['Sea', 'Sea', 'Air', 'Sea', 'Rail'],
+        'ETA': ['2024-01-15', '2024-01-18', '2024-01-12', '2024-01-20', '2024-01-22'],
+        'Risk': ['High', 'Critical', 'Low', 'Medium', 'Low']
+    })
+
+    df_show = shipments_data.copy()
+    if status_filter != "All":
+        df_show = df_show[df_show['Status'] == status_filter]
+    if carrier_filter != "All":
+        df_show = df_show[df_show['Mode'] == carrier_filter]
+    if search_term:
+        df_show = df_show[
+            df_show['ID'].str.contains(search_term, case=False) |
+            df_show['Origin'].str.contains(search_term, case=False) |
+            df_show['Destination'].str.contains(search_term, case=False)
+        ]
+
+    # render styled table
+    st.markdown(styled_table(df_show, table_id="active-shipments"), unsafe_allow_html=True)
+
+    st.markdown("<br/>", unsafe_allow_html=True)
+    st.markdown("<div class='section-title'>Shipment Details</div>", unsafe_allow_html=True)
+
+    selected_shipment = st.selectbox("Select Shipment", shipments_data['ID'].tolist())
+    if selected_shipment:
+        # Example: find row and show a colorful gradient card with key metrics
+        row = shipments_data[shipments_data['ID'] == selected_shipment].iloc[0]
+        with st.container():
+            st.markdown(
+                f"""
+                <div class="shipment-detail-card">
+                    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;">
+                        <div style="min-width:220px;">
+                            <div class="shipment-detail-title">Shipment {html.escape(row['ID'])}</div>
+                            <div class="shipment-detail-meta">{html.escape(row['Origin'])} → {html.escape(row['Destination'])}</div>
+                            <div style="margin-top:8px;">
+                                <span class="shipment-metric">Status: {html.escape(row['Status'])}</span>
+                                <span class="shipment-metric">Mode: {html.escape(row['Mode'])}</span>
+                                <span class="shipment-metric">ETA: {html.escape(row['ETA'])}</span>
+                            </div>
+                        </div>
+                        <div style="min-width:200px;text-align:right;">
+                            <div style="font-weight:800;font-size:1.1rem;">Risk</div>
+                            <div style="margin-top:6px;font-weight:700;font-size:1.6rem;">{html.escape(row['Risk'])}</div>
+                        </div>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        st.markdown("<br/>", unsafe_allow_html=True)
+        c1, c2 = st.columns(2)
+        with c1:
+            st.markdown(f"""
+        <div class="shipment-mini-card">
+            <div class="shipment-mini-title">Current Location</div>
+            <div class="shipment-mini-value">Pacific Ocean</div>
+            <div class="shipment-mini-delta shipment-delta-up">↑ 34.0522° N, 118.2437° W</div>
+        </div>
+
+        <div class="shipment-mini-card">
+            <div class="shipment-mini-title">Days in Transit</div>
+            <div class="shipment-mini-value">12</div>
+            <div class="shipment-mini-delta shipment-delta-up">↑ +1</div>
+        </div>
+
+        <div class="shipment-mini-card">
+            <div class="shipment-mini-title">Distance Covered</div>
+            <div class="shipment-mini-value">8,450 km</div>
+            <div class="shipment-mini-delta shipment-delta-up">↑ 68%</div>
+        </div>
+    """, unsafe_allow_html=True)
+
+
+        with c2:
+             st.markdown(f"""
+        <div class="shipment-mini-card">
+            <div class="shipment-mini-title">Risk Score</div>
+            <div class="shipment-mini-value">0.82</div>
+            <div class="shipment-mini-delta shipment-delta-up">↑ High</div>
+        </div>
+
+        <div class="shipment-mini-card">
+            <div class="shipment-mini-title">Estimated Delay</div>
+            <div class="shipment-mini-value">18 hours</div>
+            <div class="shipment-mini-delta shipment-delta-up">↑ +6h</div>
+        </div>
+
+        <div class="shipment-mini-card">
+            <div class="shipment-mini-title">Autonomous Actions</div>
+            <div class="shipment-mini-value">3</div>
+            <div class="shipment-mini-delta shipment-delta-neutral">Today</div>
+        </div>
+    """, unsafe_allow_html=True)
+
+        st.subheader("🚢 Shipment Timeline")
+        timeline_data = pd.DataFrame({
+            'Event': ['Departure', 'Port Entry', 'Customs Clearance', 'Current', 'Estimated Arrival'],
+            'Date': ['2024-01-01', '2024-01-08', '2024-01-09', '2024-01-13', '2024-01-15'],
+            'Status': ['Completed', 'Completed', 'In Progress', 'Current', 'Pending'],
+            'Location': ['Shanghai', 'Singapore', 'Singapore', 'Pacific Ocean', 'Rotterdam']
+        })
+        # Render timeline as a styled table for consistent look
+        st.markdown(styled_table(timeline_data, table_id="timeline-table"), unsafe_allow_html=True)
+
+
+elif st.session_state.page == "Risks":
+    st.markdown("<div class='premium-header'>⚠️ Risk Management</div>", unsafe_allow_html=True)
+    st.markdown("<div class='premium-underline'></div>", unsafe_allow_html=True)
+
+    r1, r2, r3 = st.columns(3)
+    with r1:
+        st.markdown("<div class='kpi-card'><div class='kpi-title'>Active Risks</div><div class='kpi-value'>24</div><div class='kpi-delta delta-up'>▲ +3</div></div>", unsafe_allow_html=True)
+    with r2:
+        st.markdown("<div class='kpi-card'><div class='kpi-title'>Critical Risks</div><div class='kpi-value'>8</div><div class='kpi-delta delta-up'>▲ +2</div></div>", unsafe_allow_html=True)
+    with r3:
+        st.markdown("<div class='kpi-card'><div class='kpi-title'>Mitigations Applied</div><div class='kpi-value'>16</div><div class='kpi-delta delta-neutral'>67%</div></div>", unsafe_allow_html=True)
+
+    st.markdown("<br/>", unsafe_allow_html=True)
+    st.subheader("Risk Breakdown by Type")
+    risk_types = pd.DataFrame({
+        'Type': ['Port Congestion', 'Customs Delay', 'Quality Hold', 'Weather Impact', 'Equipment Failure', 'Other'],
+        'Count': [8, 6, 4, 3, 2, 1],
+        'Severity': ['High', 'High', 'Medium', 'Medium', 'Low', 'Low']
+    })
+    fig_risk = px.bar(risk_types, x='Type', y='Count', color='Severity',
+                      color_discrete_map={'High': 'red', 'Medium':'orange', 'Low':'yellow'})
+    st.plotly_chart(fig_risk, use_container_width=True)
+
+    st.markdown("<br/>", unsafe_allow_html=True)
+    st.subheader("🚨 Recent Risk Alerts")
+    alerts = pd.DataFrame({
+        'Time': ['10:30', '10:25', '10:20', '10:15', '10:10'],
+        'Shipment': ['SH-001', 'SH-045', 'SH-089', 'SH-112', 'SH-156'],
+        'Risk Type': ['Port Congestion', 'Customs Delay', 'Weather Impact', 'Quality Hold', 'Port Congestion'],
+        'Severity': ['High', 'Critical', 'Medium', 'Medium', 'High'],
+        'Action Taken': ['Rerouted', 'Expedited Clearance', 'Schedule Adjusted', 'Remote Inspection', 'Monitoring'],
+        'Status': ['Resolved', 'In Progress', 'Resolved', 'In Progress', 'Detected']
+    })
+    st.markdown(styled_table(alerts, table_id="alerts-table"), unsafe_allow_html=True)
+
+
+elif st.session_state.page == "Simulations":
+    st.markdown("<div class='premium-header'>🔮 Mitigation Simulations</div>", unsafe_allow_html=True)
+    st.markdown("<div class='premium-underline'></div>", unsafe_allow_html=True)
+
+    st.markdown("<div class='flat-title'>Digital Twin Simulations</div>", unsafe_allow_html=True)
+
+    scenarios = [
+        {
+            "name": "Port Congestion Mitigation",
+            "shipment": "SH-001",
+            "risk": "Port congestion at Rotterdam",
+            "options": [
+                {"name": "Alternative Port", "time_savings": 24, "cost": 5000, "risk": 0.3},
+                {"name": "Schedule Delay", "time_savings": -12, "cost": 1000, "risk": 0.5},
+                {"name": "Mode Switch", "time_savings": 48, "cost": 15000, "risk": 0.2}
+            ]
+        },
+        {
+            "name": "Customs Delay Mitigation",
+            "shipment": "SH-045",
+            "risk": "Customs clearance delayed",
+            "options": [
+                {"name": "Expedited Service", "time_savings": 20, "cost": 2500, "risk": 0.4},
+                {"name": "Additional Docs", "time_savings": 12, "cost": 500, "risk": 0.6}
+            ]
+        }
+    ]
+
+    for idx, scenario in enumerate(scenarios):
+        with st.expander(f"📊 {scenario['name']} — {scenario['shipment']}"):
+            st.markdown(f"**Risk:** {scenario['risk']}")
+            options_df = pd.DataFrame(scenario["options"])
+            st.markdown(styled_table(options_df, table_id=f"options-{idx}"), unsafe_allow_html=True)
+
+          
+            fig = px.scatter(
+                options_df,
+                x="cost",
+                y="time_savings",
+                size="risk",
+                color="name",
+                hover_name="name",
+                title="Cost vs Time Savings"
+            )
+            fig.update_layout(height=360, margin=dict(t=40, b=20, l=20, r=20))
+            st.plotly_chart(fig, use_container_width=True)
+
+            if st.button(f"Run Simulation for {scenario['shipment']}", key=f"sim_run_{idx}"):
+                with st.spinner("Running simulation..."):
+                    time.sleep(1.2)
+                st.success("Simulation completed — recommended: Alternative Port")
+
+    st.markdown("<br/>", unsafe_allow_html=True)
+    st.markdown("<div class='section-title'>Simulation Summary</div>", unsafe_allow_html=True)
+    col_a, col_b, col_c = st.columns(3)
+    with col_a:
+        st.markdown("<div class='kpi-card'><div class='kpi-title'>Baseline Delay (hrs)</div><div class='kpi-value'>48</div><div class='kpi-delta delta-down'>▼ -30%</div></div>", unsafe_allow_html=True)
+    with col_b:
+        st.markdown("<div class='kpi-card'><div class='kpi-title'>AI Mitigated Delay (hrs)</div><div class='kpi-value'>12</div><div class='kpi-delta delta-neutral'>Projected</div></div>", unsafe_allow_html=True)
+    with col_c:
+        st.markdown("<div class='kpi-card'><div class='kpi-title'>Estimated Savings</div><div class='kpi-value'>$1.6M</div><div class='kpi-delta delta-up'>▲ +75%</div></div>", unsafe_allow_html=True)
+
+elif st.session_state.page == "Digital Twin":
+    st.markdown("<div class='premium-header'>👥 Digital Twin & MCP Agents</div>", unsafe_allow_html=True)
+    st.markdown("<div class='premium-underline'></div>", unsafe_allow_html=True)
+
+    st.markdown("<div class='flat-title'>🤖 MCP Agent Network</div>", unsafe_allow_html=True)
+
+    agents = pd.DataFrame({
+        'Agent': ['Central Orchestrator', 'Risk Detector', 'Route Optimizer', 'Stakeholder Comms', 'Simulation Engine', 'Action Executor'],
+        'Status': ['Active', 'Active', 'Active', 'Active', 'Active', 'Active'],
+        'CPU %': ['15%','8%','12%','6%','22%','9%'],
+        'Memory': ['512MB','256MB','384MB','192MB','768MB','320MB'],
+        'Messages': ['1,425','892','764','543','672','456'],
+        'Uptime': ['7d 12h']*6
+    })
+    st.markdown(styled_table(agents, table_id="agents-table"), unsafe_allow_html=True)
+
+    st.markdown("<br/>", unsafe_allow_html=True)
+    st.markdown("<div class='flat-title'>📡 MCP Message Flow</div>", unsafe_allow_html=True)
+    messages = pd.DataFrame({
+        'Time': ['10:30:01','10:30:03','10:30:05','10:30:07','10:30:10'],
+        'From': ['Risk Detector','Orchestrator','Simulation Engine','Orchestrator','Action Executor'],
+        'To': ['Orchestrator','Simulation Engine','Orchestrator','Action Executor','Orchestrator'],
+        'Message': ['Risk detected: Port congestion','Simulate mitigation options','3 options simulated, best: reroute','Execute reroute action','Action completed successfully'],
+        'Context': ['SH-001']*5
+    })
+    st.markdown(styled_table(messages, table_id="messages-table"), unsafe_allow_html=True)
+
+    st.markdown("<br/>", unsafe_allow_html=True)
+    st.markdown("<div class='flat-title'>🔄 Real-time Agent Activity</div>", unsafe_allow_html=True)
+
+    nodes = pd.DataFrame({
+        'Node': ['Orchestrator','Risk Detector','Route Optimizer','Stakeholder Comms','Simulation Engine','Action Executor'],
+        'X': [0,-2,0,2,-2,2],
+        'Y': [0,1,2,1,-1,-1],
+        'Size': [30,20,20,20,25,25],
+        'Color': ['#FF6B6B','#4ECDC4','#45B7D1','#96CEB4','#FFEAA7','#DDA0DD']
+    })
+    edges = pd.DataFrame({
+        'From': ['Orchestrator','Orchestrator','Orchestrator','Risk Detector','Route Optimizer','Simulation Engine'],
+        'To':   ['Risk Detector','Route Optimizer','Stakeholder Comms','Simulation Engine','Action Executor','Action Executor']
+    })
+
+
+    fig_net = go.Figure()
+    for _, edge in edges.iterrows():
+        from_node = nodes[nodes['Node'] == edge['From']].iloc[0]
+        to_node = nodes[nodes['Node'] == edge['To']].iloc[0]
+        fig_net.add_trace(go.Scatter(x=[from_node['X'], to_node['X']], y=[from_node['Y'], to_node['Y']],
+                                     mode='lines', line=dict(width=2,color='#888'), hoverinfo='none'))
+    fig_net.add_trace(go.Scatter(x=nodes['X'], y=nodes['Y'], mode='markers+text', text=nodes['Node'],
+                                 textposition="bottom center",
+                                 marker=dict(size=nodes['Size'], color=nodes['Color'], line=dict(width=2, color='white'))))
+    fig_net.update_layout(title="MCP Agent Communication Network", showlegend=False, hovermode='closest',
+                          margin=dict(b=0,l=0,r=0,t=40), xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                          yaxis=dict(showgrid=False, zeroline=False, showticklabels=False), height=420)
+    st.plotly_chart(fig_net, use_container_width=True)
+
+
+st.markdown("<hr/>", unsafe_allow_html=True)
+st.caption("Autonomous Control Tower v1.0 | Real-time monitoring active | Last updated: " + datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
