@@ -1,7 +1,0 @@
-# Access RabbitMQ Management Console
-# URL: http://localhost:15672
-# Username: guest
-# Password: guest
-
-# Or via command line
-sudo rabbitmqctl list_queues

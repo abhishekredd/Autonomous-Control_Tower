@@ -29,7 +29,7 @@ class ShipmentService:
             carrier=shipment_data.carrier,
             consignee=shipment_data.consignee,
             status=ShipmentStatus.PENDING,
-            metadata={
+            shipment_metadata={
                 "created_by": "api",
                 "created_at": datetime.utcnow().isoformat()
             }
@@ -86,23 +86,26 @@ class ShipmentService:
         )
         return result.scalar_one_or_none()
     
-    async def get_shipments(self, session: AsyncSession, skip: int = 0, limit: int = 100,
-                          status: Optional[str] = None,
-                          at_risk: Optional[bool] = None
-                          ) -> List[Shipment]:
-        """Get shipments with filtering"""
-        query = select(Shipment)
-        
-        if status:
-            query = query.where(Shipment.status == ShipmentStatus(status))
-        
-        if at_risk is not None:
-            query = query.where(Shipment.is_at_risk == at_risk)
-        
-        query = query.offset(skip).limit(limit).order_by(desc(Shipment.created_at))
-        
-        result = await session.execute(query)
-        return result.scalars().all()
+    async def get_shipments(self,
+            skip: int = 0,
+            limit: int = 100,
+            status: Optional[str] = None,
+            at_risk: Optional[bool] = None,
+            db: AsyncSession = None
+        ) -> List[Shipment]:
+            """Get shipments with filtering"""
+            query = select(Shipment)
+
+            if status:
+                query = query.where(Shipment.status == ShipmentStatus(status))
+
+            if at_risk is not None:
+                query = query.where(Shipment.is_at_risk == at_risk)
+
+            query = query.offset(skip).limit(limit).order_by(desc(Shipment.created_at))
+
+            result = await db.execute(query)
+            return result.scalars().all()
     
     async def update_shipment(self, shipment_id: int, update_data: ShipmentUpdate,
                             session: AsyncSession) -> Optional[Shipment]:
@@ -114,7 +117,7 @@ class ShipmentService:
         
         # Update fields
         for field, value in update_data.dict(exclude_unset=True).items():
-            if field == "metadata" and value:
+            if field == "shipment_metadata" and value:
                 shipment.shipment_metadata = {**shipment.shipment_metadata, **value}
             elif hasattr(shipment, field):
                 setattr(shipment, field, value)

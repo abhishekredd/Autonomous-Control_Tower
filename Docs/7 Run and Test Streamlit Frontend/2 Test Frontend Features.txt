@@ -1,9 +1,0 @@
-Dashboard Tab: View metrics, charts, and live updates
-
-Shipments Tab: Browse and filter shipments
-
-Risks Tab: View and manage detected risks
-
-Simulations Tab: Run and view mitigation simulations
-
-Digital Twin Tab: Monitor MCP agent activities

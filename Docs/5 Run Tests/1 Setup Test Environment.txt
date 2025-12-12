@@ -1,6 +1,0 @@
-# Create test database
-createdb -h localhost -U postgres test_control_tower
-
-# Set test environment variables
-export TEST_DATABASE_URL=postgresql://postgres@localhost:5432/test_control_tower
-export TESTING=True

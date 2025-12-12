@@ -84,7 +84,7 @@ class ShipmentUpdate(BaseModel):
     next_port: Optional[str] = None
     actual_departure: Optional[datetime] = None
     actual_arrival: Optional[datetime] = None
-    metadata: Optional[Dict[str, Any]] = None
+    shipment_metadata: Optional[Dict[str, Any]] = None
 
 class ShipmentInDB(ShipmentBase):
     id: int
@@ -95,7 +95,7 @@ class ShipmentInDB(ShipmentBase):
     is_at_risk: bool = False
     risk_score: float = 0.0
     last_risk_check: Optional[datetime] = None
-    metadata: Dict[str, Any] = Field(default_factory=dict)
+    shipment_metadata: Dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     updated_at: Optional[datetime] = None
 
