@@ -39,7 +39,7 @@ class SimulationInDB(SimulationBase):
     confidence_score: Optional[float] = None
     initiated_by: str = "system"
     execution_time: Optional[float] = None
-    metadata: Dict[str, Any] = Field(default_factory=dict)
+    simulation_metadata: Dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
     updated_at: Optional[datetime] = None
     

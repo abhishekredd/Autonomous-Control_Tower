@@ -33,9 +33,13 @@ class Risk(TimeStampedBase):
     
     id = Column(Integer, primary_key=True, index=True)
     shipment_id = Column(Integer, ForeignKey("shipments.id"))
-    risk_type = Column(Enum(RiskType))
-    severity = Column(Enum(RiskSeverity))
-    status = Column(Enum(RiskStatus), default=RiskStatus.DETECTED)
+    # Store enum-backed fields as plain strings to avoid SQLAlchemy mapping enum
+    # member names (which can be uppercase) to Postgres enum labels. The DB
+    # still uses user-defined enum types; passing plain lowercase strings that
+    # match the enum labels is the most reliable approach across drivers.
+    risk_type = Column(String)
+    severity = Column(String)
+    status = Column(String, default=RiskStatus.DETECTED.value)
     
     description = Column(Text)
     confidence = Column(Float)  # 0.0 to 1.0

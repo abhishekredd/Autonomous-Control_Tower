@@ -118,10 +118,10 @@ class TestRiskService:
             mock_congestion.return_value = 0.8  # High congestion
             
             risks = await service.detect_risks(1, mock_session)
-            
+
             assert len(risks) > 0
             assert any(r.risk_type == "port_congestion" for r in risks)
-            assert any(r.severity == RiskSeverity.HIGH for r in risks)
+            assert any(r.severity == RiskSeverity.HIGH.value for r in risks)
     
     @pytest.mark.asyncio
     async def test_detect_risks_customs_delay(self):
@@ -137,10 +137,10 @@ class TestRiskService:
         
         service = RiskService()
         risks = await service.detect_risks(1, mock_session)
-        
+
         assert len(risks) > 0
         assert any(r.risk_type == "customs_delay" for r in risks)
-        assert any(r.severity == RiskSeverity.HIGH for r in risks)
+        assert any(r.severity == RiskSeverity.HIGH.value for r in risks)
     
     @pytest.mark.asyncio
     async def test_detect_risks_quality_hold(self):
@@ -156,10 +156,10 @@ class TestRiskService:
         
         service = RiskService()
         risks = await service.detect_risks(1, mock_session)
-        
+
         assert len(risks) > 0
         assert any(r.risk_type == "quality_hold" for r in risks)
-        assert any(r.severity == RiskSeverity.MEDIUM for r in risks)
+        assert any(r.severity == RiskSeverity.MEDIUM.value for r in risks)
     
     @pytest.mark.asyncio
     async def test_detect_risks_delay(self):
@@ -175,10 +175,10 @@ class TestRiskService:
         
         service = RiskService()
         risks = await service.detect_risks(1, mock_session)
-        
+
         assert len(risks) > 0
         assert any(r.risk_type == "other" for r in risks)  # Delay is "other" type
-        assert any(r.severity == RiskSeverity.MEDIUM for r in risks)
+        assert any(r.severity == RiskSeverity.MEDIUM.value for r in risks)
 
 class TestSimulationService:
     """Test simulation service functionality"""
@@ -190,8 +190,8 @@ class TestSimulationService:
         
         risk = Risk(
             id=1,
-            risk_type=RiskType.PORT_CONGESTION,
-            severity=RiskSeverity.HIGH
+            risk_type=RiskType.PORT_CONGESTION.value,
+            severity=RiskSeverity.HIGH.value
         )
         
         shipment = Shipment(
@@ -202,21 +202,21 @@ class TestSimulationService:
         mock_session.get = AsyncMock(side_effect=[risk, shipment])
         
         service = SimulationService()
-        
+
         with patch('asyncio.sleep', new_callable=AsyncMock):
             results = await service.simulate_mitigations(1, 1)
-            
+
             assert isinstance(results, list)
             assert len(results) > 0
-            
-            # Check structure of results
+
+            # Check structure of results (matches SimulationService._run_simulation)
             for result in results:
                 assert "scenario_name" in result
                 assert "action_type" in result
                 assert "cost_impact" in result
-                assert "time_impact" in result
+                assert "time_savings_hours" in result
                 assert "risk_reduction" in result
-                assert "overall_score" in result
+                assert "confidence" in result
     
     @pytest.mark.asyncio
     async def test_generate_mitigation_scenarios(self):
