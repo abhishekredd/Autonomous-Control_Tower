@@ -52,14 +52,24 @@ class RiskInDB(RiskBase):
     status: RiskStatus
     detected_at: datetime
     resolved_at: Optional[datetime] = None
-    affected_parties: List[str] = Field(default_factory=list)
-    mitigation_actions: List[Dict[str, Any]] = Field(default_factory=list)
+
+    # ✅ allow None and default to empty list
+    affected_parties: Optional[List[str]] = Field(default_factory=list)
+    mitigation_actions: Optional[List[Dict[str, Any]]] = Field(default_factory=list)
+
     selected_mitigation: Optional[Dict[str, Any]] = None
     mitigation_result: Optional[Dict[str, Any]] = None
-    source: str = "system"
-    metadata: Dict[str, Any] = Field(default_factory=dict)
+
+    # ✅ allow None and default to "system"
+    source: Optional[str] = "system"
+
+    # ✅ allow None and default to empty dict
+    risk_metadata: Optional[Dict[str, Any]] = Field(default_factory=dict)
+
     created_at: datetime
     updated_at: Optional[datetime] = None
-    
+
     class Config:
+        orm_mode = True
         from_attributes = True
+        use_enum_values = True

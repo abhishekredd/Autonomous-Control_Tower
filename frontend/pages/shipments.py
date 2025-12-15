@@ -54,17 +54,27 @@ with tabs[0]:
             ("Delayed", delayed, "Status = Delayed"),
             ("Arrived", arrived, "Status = Arrived")
         ]
+
         for col, (title, value, sub) in zip(cols, metrics):
             col.markdown(
                 f"""
-                <div class="metric-box">
-                    <div class="metric-title">{html.escape(title)}</div>
-                    <div class="metric-value">{html.escape(str(value))}</div>
-                    <div class="metric-sub">{html.escape(sub)}</div>
+                <div style="
+                    background: linear-gradient(135deg, #6D28D9, #8B5CF6);
+                    border-radius: 12px;
+                    padding: 16px;
+                    color: white;
+                    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+                    text-align: center;
+                    margin-bottom: 12px;
+                ">
+                    <div style="font-size:14px; font-weight:600; margin-bottom:6px;">{html.escape(title)}</div>
+                    <div style="font-size:28px; font-weight:700; margin-bottom:4px;">{html.escape(str(value))}</div>
+                    <div style="font-size:12px; opacity:0.9;">{html.escape(sub)}</div>
                 </div>
                 """,
                 unsafe_allow_html=True
             )
+
 # ---------------- TAB 2: CREATE SHIPMENT ----------------
 with tabs[1]:
     st.subheader("Create New Shipment")

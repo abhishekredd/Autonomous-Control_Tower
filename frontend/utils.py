@@ -13,6 +13,7 @@ def fetch_api(endpoint: str, *, method: str = "GET", params: dict | None = None,
     token = st.session_state.get("jwt_token")
     if token:
         headers["Authorization"] = f"Bearer {token}"
+    print(f"[DEBUG] Calling {method} {url} with payload={payload} and headers={headers}")
     resp = requests.request(method, url, params=params, json=payload, headers=headers, timeout=timeout)
     resp.raise_for_status()
     return resp.json() if resp.content else None
