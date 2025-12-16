@@ -130,9 +130,9 @@ async def seed_risks():
             risks.extend([
                 Risk(
                     shipment_id=shipment_id,
-                    risk_type=RiskType.PORT_CONGESTION,
-                    severity=RiskSeverity.HIGH,
-                    status=RiskStatus.DETECTED,
+                    risk_type=RiskType.PORT_CONGESTION.value,
+                    severity=RiskSeverity.HIGH.value,
+                    status=RiskStatus.DETECTED.value,
                     description=f"Port congestion detected for {tracking_number}",
                     confidence=0.85,
                     detected_at=datetime.utcnow() - timedelta(hours=6),
@@ -145,13 +145,13 @@ async def seed_risks():
                     ],
                     selected_mitigation={"action": "reroute", "reason": "Faster overall"},
                     source="MCP Risk Detector",
-                    metadata={"port": "NLRTM", "congestion_level": 0.8}
+                    risk_metadata={"port": "NLRTM", "congestion_level": 0.8}
                 ),
                 Risk(
                     shipment_id=shipment_id,
-                    risk_type=RiskType.CUSTOMS_DELAY,
-                    severity=RiskSeverity.MEDIUM,
-                    status=RiskStatus.MITIGATING,
+                    risk_type=RiskType.CUSTOMS_DELAY.value,
+                    severity=RiskSeverity.MEDIUM.value,
+                    status=RiskStatus.MITIGATING.value,
                     description=f"Customs documentation incomplete for {tracking_number}",
                     confidence=0.75,
                     detected_at=datetime.utcnow() - timedelta(hours=3),
@@ -164,7 +164,7 @@ async def seed_risks():
                     ],
                     selected_mitigation={"action": "expedite", "reason": "Time critical"},
                     source="Customs API",
-                    metadata={"missing_docs": ["certificate_of_origin"]}
+                    risk_metadata={"missing_docs": ["certificate_of_origin"]}
                 )
             ])
         

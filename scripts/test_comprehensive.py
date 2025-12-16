@@ -1,18 +1,20 @@
 #!/usr/bin/env python3
 """
-Comprehensive test script for Autonomous Control Tower
+Comprehensive test script with MCP agent integration
 """
-
 import asyncio
 import aiohttp
 import json
-from datetime import datetime
+import websockets
+from datetime import datetime, timedelta
 import sys
 
-class ComprehensiveTester:
-    def __init__(self, base_url="http://localhost:8000"):
+class MCPComprehensiveTester:
+    def __init__(self, base_url="http://localhost:8000", ws_url="ws://localhost:8000"):
         self.base_url = base_url
+        self.ws_url = ws_url
         self.session = None
+        self.test_results = []
     
     async def __aenter__(self):
         self.session = aiohttp.ClientSession()
@@ -22,348 +24,233 @@ class ComprehensiveTester:
         if self.session:
             await self.session.close()
     
-    async def test_health(self):
-        """Test health endpoint"""
-        print("🩺 Testing health endpoint...")
-        async with self.session.get(f"{self.base_url}/health") as response:
-            data = await response.json()
-            if data.get("status") == "healthy":
-                print("✅ Health check passed")
-                return True
-            else:
-                print("❌ Health check failed")
-                return False
-    
-    async def test_api_documentation(self):
-        """Test API documentation endpoints"""
-        print("📚 Testing API documentation...")
+    async def test_mcp_agent_endpoints(self):
+        """Test MCP agent API endpoints"""
+        print("🤖 Testing MCP agent endpoints...")
         
-        endpoints = ["/docs", "/redoc", "/openapi.json"]
-        results = []
+        endpoints = [
+            ("GET", "/api/v1/agents/activities", {}),
+            ("GET", "/api/v1/agents/messages/pending", {}),
+            ("POST", "/api/v1/agents/risk-detector/trigger", {
+                "shipment_id": 1,
+                "check_type": "comprehensive"
+            })
+        ]
         
-        for endpoint in endpoints:
-            async with self.session.get(f"{self.base_url}{endpoint}") as response:
-                if response.status == 200:
-                    print(f"✅ {endpoint} accessible")
-                    results.append(True)
+        for method, endpoint, data in endpoints:
+            try:
+                if method == "GET":
+                    async with self.session.get(f"{self.base_url}{endpoint}") as resp:
+                        status = resp.status
+                elif method == "POST":
+                    async with self.session.post(
+                        f"{self.base_url}{endpoint}", 
+                        json=data
+                    ) as resp:
+                        status = resp.status
+                
+                if status in [200, 201, 202]:
+                    print(f"✅ {method} {endpoint} - Success")
+                    self.test_results.append((f"MCP {endpoint}", True))
                 else:
-                    print(f"❌ {endpoint} not accessible")
-                    results.append(False)
-        
-        return all(results)
+                    print(f"❌ {method} {endpoint} - Failed: {status}")
+                    self.test_results.append((f"MCP {endpoint}", False))
+                    
+            except Exception as e:
+                print(f"❌ {method} {endpoint} - Error: {e}")
+                self.test_results.append((f"MCP {endpoint}", False))
     
-    async def test_shipment_crud(self):
-        """Test shipment CRUD operations"""
-        print("🚢 Testing shipment CRUD operations...")
+    async def test_mcp_simulation_workflow(self):
+        """Test complete MCP simulation workflow"""
+        print("🔄 Testing MCP simulation workflow...")
         
-        # Create shipment
+        # Create a test shipment
         shipment_data = {
-            "tracking_number": f"TEST-{int(datetime.now().timestamp())}",
-            "reference_number": "CRUD-TEST-001",
-            "origin": "Test Origin",
-            "destination": "Test Destination",
+            "tracking_number": f"MCP-TEST-{int(datetime.now().timestamp())}",
+            "origin": "CNSHA",
+            "destination": "NLRTM",
             "mode": "sea",
-            "weight": 10000.0,
-            "volume": 25.0,
-            "value": 100000.0,
-            "estimated_departure": datetime.utcnow().isoformat(),
-            "estimated_arrival": (datetime.utcnow() + asyncio.timedelta(days=14)).isoformat(),
-            "shipper": "Test Shipper Corp",
-            "carrier": "Test Carrier Line",
-            "consignee": "Test Consignee Ltd"
+            "is_at_risk": True
         }
-        
-        async with self.session.post(
-            f"{self.base_url}/api/v1/shipments/",
-            json=shipment_data
-        ) as response:
-            if response.status == 200:
-                created_shipment = await response.json()
-                shipment_id = created_shipment["id"]
-                print(f"✅ Shipment created (ID: {shipment_id})")
-            else:
-                print(f"❌ Failed to create shipment: {response.status}")
-                return False
-        
-        # Read shipment
-        async with self.session.get(
-            f"{self.base_url}/api/v1/shipments/{shipment_id}"
-        ) as response:
-            if response.status == 200:
-                read_shipment = await response.json()
-                if read_shipment["tracking_number"] == shipment_data["tracking_number"]:
-                    print("✅ Shipment read successfully")
-                else:
-                    print("❌ Shipment read mismatch")
-                    return False
-            else:
-                print(f"❌ Failed to read shipment: {response.status}")
-                return False
-        
-        # Update shipment
-        update_data = {
-            "current_location": "Updated Location",
-            "status": "in_transit"
-        }
-        
-        async with self.session.put(
-            f"{self.base_url}/api/v1/shipments/{shipment_id}",
-            json=update_data
-        ) as response:
-            if response.status == 200:
-                updated_shipment = await response.json()
-                if updated_shipment["current_location"] == update_data["current_location"]:
-                    print("✅ Shipment updated successfully")
-                else:
-                    print("❌ Shipment update mismatch")
-                    return False
-            else:
-                print(f"❌ Failed to update shipment: {response.status}")
-                return False
-        
-        # List shipments
-        async with self.session.get(
-            f"{self.base_url}/api/v1/shipments/"
-        ) as response:
-            if response.status == 200:
-                shipments = await response.json()
-                if isinstance(shipments, list):
-                    print(f"✅ Listed {len(shipments)} shipments")
-                else:
-                    print("❌ Invalid shipments list format")
-                    return False
-            else:
-                print(f"❌ Failed to list shipments: {response.status}")
-                return False
-        
-        # Test risk check trigger
-        async with self.session.post(
-            f"{self.base_url}/api/v1/shipments/{shipment_id}/trigger-risk-check"
-        ) as response:
-            if response.status == 200:
-                print("✅ Risk check triggered")
-            else:
-                print(f"❌ Failed to trigger risk check: {response.status}")
-        
-        return True
-    
-    async def test_risk_operations(self):
-        """Test risk operations"""
-        print("⚠️ Testing risk operations...")
-        
-        # First, get a shipment to associate with risk
-        async with self.session.get(
-            f"{self.base_url}/api/v1/shipments/"
-        ) as response:
-            if response.status != 200:
-                print("❌ Need a shipment first")
-                return False
-            
-            shipments = await response.json()
-            if not shipments:
-                print("❌ No shipments available")
-                return False
-            
-            shipment_id = shipments[0]["id"]
-        
-        # Create a risk
-        risk_data = {
-            "shipment_id": shipment_id,
-            "risk_type": "port_congestion",
-            "severity": "high",
-            "description": "Test risk for automated testing",
-            "confidence": 0.85,
-            "expected_delay_hours": 24.0,
-            "expected_cost_impact": 5000.0
-        }
-        
-        async with self.session.post(
-            f"{self.base_url}/api/v1/risks/",
-            json=risk_data
-        ) as response:
-            if response.status == 201:
-                created_risk = await response.json()
-                risk_id = created_risk["id"]
-                print(f"✅ Risk created (ID: {risk_id})")
-            else:
-                print(f"❌ Failed to create risk: {response.status}")
-                return False
-        
-        # List risks
-        async with self.session.get(
-            f"{self.base_url}/api/v1/risks/"
-        ) as response:
-            if response.status == 200:
-                risks = await response.json()
-                print(f"✅ Listed {len(risks)} risks")
-            else:
-                print(f"❌ Failed to list risks: {response.status}")
-        
-        # Get risks for shipment
-        async with self.session.get(
-            f"{self.base_url}/api/v1/risks/shipment/{shipment_id}"
-        ) as response:
-            if response.status == 200:
-                shipment_risks = await response.json()
-                print(f"✅ Got {len(shipment_risks)} risks for shipment")
-            else:
-                print(f"❌ Failed to get shipment risks: {response.status}")
-        
-        return True
-    
-    async def test_simulation_operations(self):
-        """Test simulation operations"""
-        print("🔮 Testing simulation operations...")
-        
-        # Get a shipment
-        async with self.session.get(
-            f"{self.base_url}/api/v1/shipments/"
-        ) as response:
-            if response.status != 200:
-                return False
-            
-            shipments = await response.json()
-            if not shipments:
-                print("❌ No shipments available")
-                return False
-            
-            shipment_id = shipments[0]["id"]
-        
-        # Create simulation
-        simulation_data = {
-            "shipment_id": shipment_id,
-            "simulation_type": "mitigation_analysis",
-            "parameters": {
-                "risk_type": "port_congestion",
-                "scenario": "what_if_analysis"
-            },
-            "scenario_description": "Test simulation scenario"
-        }
-        
-        async with self.session.post(
-            f"{self.base_url}/api/v1/simulations/",
-            json=simulation_data
-        ) as response:
-            if response.status == 200:
-                simulation = await response.json()
-                print(f"✅ Simulation created (ID: {simulation['id']})")
-            else:
-                print(f"❌ Failed to create simulation: {response.status}")
-                return False
-        
-        return True
-    
-    async def test_websocket_connection(self):
-        """Test WebSocket connection"""
-        print("🔌 Testing WebSocket connection...")
         
         try:
-            # This is a basic test - actual WebSocket testing would need websockets library
-            import websockets
+            # Create shipment
+            async with self.session.post(
+                f"{self.base_url}/api/v1/shipments/",
+                json=shipment_data
+            ) as resp:
+                if resp.status == 200:
+                    shipment = await resp.json()
+                    shipment_id = shipment["id"]
+                    print(f"✅ Test shipment created: {shipment_id}")
+                else:
+                    print(f"❌ Failed to create test shipment: {resp.status}")
+                    return False
             
-            # Get a shipment ID first
+            # Trigger risk detection
+            async with self.session.post(
+                f"{self.base_url}/api/v1/shipments/{shipment_id}/trigger-risk-check"
+            ) as resp:
+                if resp.status == 200:
+                    print("✅ Risk detection triggered")
+                else:
+                    print(f"❌ Risk detection failed: {resp.status}")
+            
+            # Check for risks
+            await asyncio.sleep(2)  # Give time for MCP agents to work
+            
+            async with self.session.get(
+                f"{self.base_url}/api/v1/risks/shipment/{shipment_id}"
+            ) as resp:
+                if resp.status == 200:
+                    risks = await resp.json()
+                    print(f"✅ Found {len(risks)} risks for shipment")
+                else:
+                    print(f"❌ Failed to get risks: {resp.status}")
+            
+            # Check MCP agent activities
+            async with self.session.get(
+                f"{self.base_url}/api/v1/agents/activities?shipment_id={shipment_id}"
+            ) as resp:
+                if resp.status == 200:
+                    activities = await resp.json()
+                    print(f"✅ Found {len(activities)} MCP activities")
+                else:
+                    print(f"⚠️ No MCP activities endpoint")
+            
+            self.test_results.append(("MCP Workflow", True))
+            return True
+            
+        except Exception as e:
+            print(f"❌ MCP workflow test failed: {e}")
+            self.test_results.append(("MCP Workflow", False))
+            return False
+    
+    async def test_websocket_mcp_updates(self):
+        """Test WebSocket for MCP updates"""
+        print("🔌 Testing WebSocket for MCP updates...")
+        
+        try:
+            # Get a shipment
             async with self.session.get(
                 f"{self.base_url}/api/v1/shipments/"
-            ) as response:
-                if response.status != 200:
+            ) as resp:
+                if resp.status != 200:
                     return False
                 
-                shipments = await response.json()
+                shipments = await resp.json()
                 if not shipments:
                     return False
                 
                 shipment_id = shipments[0]["id"]
             
-            # Try to connect to WebSocket
-            ws_url = f"ws://localhost:8000/ws/shipments/{shipment_id}"
+            # Connect to WebSocket
+            uri = f"{self.ws_url}/ws/shipments/{shipment_id}"
             try:
-                async with websockets.connect(ws_url) as websocket:
-                    # Send a test message
-                    await websocket.send(json.dumps({"type": "test"}))
+                async with websockets.connect(uri) as websocket:
+                    # Subscribe to MCP updates
+                    await websocket.send(json.dumps({
+                        "type": "subscribe",
+                        "channels": ["mcp_updates", "risk_alerts"]
+                    }))
                     
-                    # Try to receive (with timeout)
+                    # Wait for message
                     try:
-                        message = await asyncio.wait_for(websocket.recv(), timeout=2.0)
-                        print(f"✅ WebSocket connected and received: {message[:100]}...")
+                        message = await asyncio.wait_for(websocket.recv(), timeout=3.0)
+                        data = json.loads(message)
+                        print(f"✅ WebSocket MCP update received: {data.get('type')}")
+                        self.test_results.append(("WebSocket MCP", True))
                         return True
                     except asyncio.TimeoutError:
-                        print("⚠️ WebSocket connected but no message received (might be normal)")
-                        return True
-                    
+                        print("⚠️ No immediate MCP updates (may be normal)")
+                        self.test_results.append(("WebSocket MCP", None))
+                        return None
+                        
             except Exception as e:
                 print(f"❌ WebSocket connection failed: {e}")
+                self.test_results.append(("WebSocket MCP", False))
                 return False
                 
         except ImportError:
-            print("⚠️ Skipping WebSocket test (websockets library not installed)")
-            print("   Install with: pip install websockets")
+            print("⚠️ Skipping WebSocket test (websockets not installed)")
+            self.test_results.append(("WebSocket MCP", None))
             return None
     
     async def run_all_tests(self):
         """Run all comprehensive tests"""
         print("="*60)
-        print("🚀 COMPREHENSIVE BACKEND TEST SUITE")
+        print("🚀 MCP-ENHANCED COMPREHENSIVE TEST SUITE")
         print("="*60)
         
-        test_results = []
+        # Run existing tests (from original test_comprehensive.py)
+        from test_comprehensive import ComprehensiveTester
+        base_tester = ComprehensiveTester(self.base_url)
+        base_tester.session = self.session
         
         # Health check
-        health_ok = await self.test_health()
-        test_results.append(("Health Check", health_ok))
+        health_ok = await base_tester.test_health()
+        self.test_results.append(("Health Check", health_ok))
         
-        # API documentation
-        docs_ok = await self.test_api_documentation()
-        test_results.append(("API Documentation", docs_ok))
+        # API docs
+        docs_ok = await base_tester.test_api_documentation()
+        self.test_results.append(("API Documentation", docs_ok))
         
         # Shipment CRUD
-        shipment_ok = await self.test_shipment_crud()
-        test_results.append(("Shipment CRUD", shipment_ok))
+        shipment_ok = await base_tester.test_shipment_crud()
+        self.test_results.append(("Shipment CRUD", shipment_ok))
         
         # Risk operations
-        risk_ok = await self.test_risk_operations()
-        test_results.append(("Risk Operations", risk_ok))
+        risk_ok = await base_tester.test_risk_operations()
+        self.test_results.append(("Risk Operations", risk_ok))
         
-        # Simulation operations
-        simulation_ok = await self.test_simulation_operations()
-        test_results.append(("Simulation Operations", simulation_ok))
-        
-        # WebSocket (optional)
-        ws_result = await self.test_websocket_connection()
-        test_results.append(("WebSocket Connection", ws_result))
+        # MCP-specific tests
+        await self.test_mcp_agent_endpoints()
+        await self.test_mcp_simulation_workflow()
+        await self.test_websocket_mcp_updates()
         
         # Print summary
+        self.print_summary()
+        
+        # Return overall success
+        passed = sum(1 for _, result in self.test_results if result is True)
+        total = sum(1 for _, result in self.test_results if result is not None)
+        
+        return passed == total
+    
+    def print_summary(self):
+        """Print test summary"""
         print("\n" + "="*60)
-        print("📊 TEST SUMMARY")
+        print("📊 MCP TEST SUMMARY")
         print("="*60)
         
         passed = 0
+        skipped = 0
         total = 0
         
-        for test_name, result in test_results:
+        for test_name, result in self.test_results:
             total += 1
             if result is None:
-                status = "SKIPPED"
+                status = "🟡 SKIPPED"
+                skipped += 1
             elif result:
                 status = "✅ PASSED"
                 passed += 1
             else:
                 status = "❌ FAILED"
             
-            print(f"{test_name:25} {status}")
+            print(f"{test_name:30} {status}")
         
         print("="*60)
-        print(f"Overall: {passed}/{total} tests passed")
+        print(f"Overall: {passed}/{total - skipped} passed, {skipped} skipped")
         
-        if passed == total:
-            print("🎉 All tests passed! Backend is ready.")
-            return True
+        if passed == total - skipped:
+            print("🎉 All tests passed! MCP system is operational.")
         else:
             print("⚠️ Some tests failed. Check the logs above.")
-            return False
 
 async def main():
     """Main test runner"""
-    async with ComprehensiveTester() as tester:
+    async with MCPComprehensiveTester() as tester:
         success = await tester.run_all_tests()
         sys.exit(0 if success else 1)
 

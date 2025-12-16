@@ -161,7 +161,7 @@ services:
     depends_on:
       - api
     volumes:
-      - ./frontend:/app/frontend
+      - ./frontend:/app
     restart: unless-stopped
 
 volumes:

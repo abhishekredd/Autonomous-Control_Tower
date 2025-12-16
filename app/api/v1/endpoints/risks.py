@@ -22,14 +22,22 @@ async def get_risks(
     current_user: dict = Depends(get_current_user)
 ):
     """Get all risks with optional filters"""
-    return await risk_service.get_risks(
-        skip=skip,
-        limit=limit,
-        shipment_id=shipment_id,
-        status=status,
-        severity=severity,
-        session=db
-    )
+    try:
+        risks = await risk_service.get_risks(
+            skip=skip,
+            limit=limit,
+            shipment_id=shipment_id,
+            status=status,
+            severity=severity,
+            session=db
+        )
+        print(f"[DEBUG] Returning {len(risks)} risks")
+        return risks
+    except Exception as e:
+        import traceback
+        print("[ERROR] Exception in /risks:", e)
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/{risk_id}", response_model=RiskInDB)
 async def get_risk(
@@ -38,10 +46,16 @@ async def get_risk(
     current_user: dict = Depends(get_current_user)
 ):
     """Get a specific risk"""
-    risk = await risk_service.get_risk(risk_id, db)
-    if not risk:
-        raise HTTPException(status_code=404, detail="Risk not found")
-    return risk
+    try:
+        risk = await risk_service.get_risk(risk_id, db)
+        if not risk:
+            raise HTTPException(status_code=404, detail="Risk not found")
+        return risk
+    except Exception as e:
+        import traceback
+        print("[ERROR] Exception in /risks/{risk_id}:", e)
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/", response_model=RiskInDB, status_code=status.HTTP_201_CREATED)
 async def create_risk(
@@ -50,12 +64,17 @@ async def create_risk(
     current_user: dict = Depends(require_role("admin"))
 ):
     """Create a new risk (admin only)"""
-    # Verify shipment exists
-    shipment = await shipment_service.get_shipment(risk.shipment_id, db)
-    if not shipment:
-        raise HTTPException(status_code=404, detail="Shipment not found")
-    
-    return await risk_service.create_risk(risk, db)
+    try:
+        # Verify shipment exists
+        shipment = await shipment_service.get_shipment(risk.shipment_id, db)
+        if not shipment:
+            raise HTTPException(status_code=404, detail="Shipment not found")
+        return await risk_service.create_risk(risk, db)
+    except Exception as e:
+        import traceback
+        print("[ERROR] Exception in POST /risks:", e)
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.put("/{risk_id}", response_model=RiskInDB)
 async def update_risk(
@@ -65,10 +84,16 @@ async def update_risk(
     current_user: dict = Depends(require_role("admin"))
 ):
     """Update a risk (admin only)"""
-    risk = await risk_service.update_risk(risk_id, risk_update, db)
-    if not risk:
-        raise HTTPException(status_code=404, detail="Risk not found")
-    return risk
+    try:
+        risk = await risk_service.update_risk(risk_id, risk_update, db)
+        if not risk:
+            raise HTTPException(status_code=404, detail="Risk not found")
+        return risk
+    except Exception as e:
+        import traceback
+        print("[ERROR] Exception in PUT /risks/{risk_id}:", e)
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.delete("/{risk_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_risk(
@@ -77,9 +102,15 @@ async def delete_risk(
     current_user: dict = Depends(require_role("admin"))
 ):
     """Delete a risk (admin only)"""
-    success = await risk_service.delete_risk(risk_id, db)
-    if not success:
-        raise HTTPException(status_code=404, detail="Risk not found")
+    try:
+        success = await risk_service.delete_risk(risk_id, db)
+        if not success:
+            raise HTTPException(status_code=404, detail="Risk not found")
+    except Exception as e:
+        import traceback
+        print("[ERROR] Exception in DELETE /risks/{risk_id}:", e)
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post("/{risk_id}/mitigate")
 async def mitigate_risk(
@@ -89,21 +120,26 @@ async def mitigate_risk(
     current_user: dict = Depends(require_role("admin"))
 ):
     """Apply mitigation to a risk"""
-    risk = await risk_service.get_risk(risk_id, db)
-    if not risk:
-        raise HTTPException(status_code=404, detail="Risk not found")
-    
-    # Apply mitigation
-    updated_risk = await risk_service.apply_mitigation(
-        risk_id=risk_id,
-        mitigation_data=mitigation_data,
-        session=db
-    )
-    
-    return {
-        "message": "Mitigation applied successfully",
-        "risk": updated_risk
-    }
+    try:
+        risk = await risk_service.get_risk(risk_id, db)
+        if not risk:
+            raise HTTPException(status_code=404, detail="Risk not found")
+        
+        # Apply mitigation
+        updated_risk = await risk_service.apply_mitigation(
+            risk_id=risk_id,
+            mitigation_data=mitigation_data,
+            session=db
+        )
+        return {
+            "message": "Mitigation applied successfully",
+            "risk": updated_risk
+        }
+    except Exception as e:
+        import traceback
+        print("[ERROR] Exception in POST /risks/{risk_id}/mitigate:", e)
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/shipment/{shipment_id}", response_model=List[RiskInDB])
 async def get_shipment_risks(
@@ -112,8 +148,14 @@ async def get_shipment_risks(
     current_user: dict = Depends(get_current_user)
 ):
     """Get all risks for a specific shipment"""
-    risks = await risk_service.get_shipment_risks(shipment_id, db)
-    return risks
+    try:
+        risks = await risk_service.get_shipment_risks(shipment_id, db)
+        return risks
+    except Exception as e:
+        import traceback
+        print("[ERROR] Exception in GET /risks/shipment/{shipment_id}:", e)
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.get("/dashboard/stats")
 async def get_risk_statistics(
@@ -121,5 +163,11 @@ async def get_risk_statistics(
     current_user: dict = Depends(get_current_user)
 ):
     """Get risk statistics for dashboard"""
-    stats = await risk_service.get_risk_statistics(db)
-    return stats
+    try:
+        stats = await risk_service.get_risk_statistics(db)
+        return stats
+    except Exception as e:
+        import traceback
+        print("[ERROR] Exception in GET /risks/dashboard/stats:", e)
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))

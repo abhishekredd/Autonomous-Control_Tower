@@ -1,5 +1,5 @@
 from typing import List, Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, and_, or_, desc, func
 from sqlalchemy.orm import selectinload
@@ -14,6 +14,14 @@ class ShipmentService:
     
     async def create_shipment(self, shipment_data: ShipmentCreate, session: AsyncSession) -> Shipment:
         """Create a new shipment"""
+        def _to_naive(dt: Optional[datetime]) -> Optional[datetime]:
+            if dt is None:
+                return None
+            # If tz-aware, convert to UTC then drop tzinfo to store as naive
+            if dt.tzinfo is not None:
+                return dt.astimezone(timezone.utc).replace(tzinfo=None)
+            return dt
+
         shipment = Shipment(
             tracking_number=shipment_data.tracking_number,
             reference_number=shipment_data.reference_number,
@@ -23,19 +31,25 @@ class ShipmentService:
             weight=shipment_data.weight,
             volume=shipment_data.volume,
             value=shipment_data.value,
-            estimated_departure=shipment_data.estimated_departure,
-            estimated_arrival=shipment_data.estimated_arrival,
+            estimated_departure=_to_naive(shipment_data.estimated_departure),
+            estimated_arrival=_to_naive(shipment_data.estimated_arrival),
             shipper=shipment_data.shipper,
             carrier=shipment_data.carrier,
             consignee=shipment_data.consignee,
             status=ShipmentStatus.PENDING,
-            metadata={
+            shipment_metadata={
                 "created_by": "api",
                 "created_at": datetime.utcnow().isoformat()
             }
         )
         
         session.add(shipment)
+        # Ensure any tz-aware datetimes on the instance are normalized to tz-naive before flush
+        for _field in ("estimated_departure", "estimated_arrival", "actual_departure", "actual_arrival", "last_risk_check"):
+            val = getattr(shipment, _field, None)
+            if isinstance(val, datetime) and val.tzinfo is not None:
+                setattr(shipment, _field, val.astimezone(timezone.utc).replace(tzinfo=None))
+
         await session.commit()
         await session.refresh(shipment)
         
@@ -86,23 +100,26 @@ class ShipmentService:
         )
         return result.scalar_one_or_none()
     
-    async def get_shipments(self, session: AsyncSession, skip: int = 0, limit: int = 100,
-                          status: Optional[str] = None,
-                          at_risk: Optional[bool] = None
-                          ) -> List[Shipment]:
-        """Get shipments with filtering"""
-        query = select(Shipment)
-        
-        if status:
-            query = query.where(Shipment.status == ShipmentStatus(status))
-        
-        if at_risk is not None:
-            query = query.where(Shipment.is_at_risk == at_risk)
-        
-        query = query.offset(skip).limit(limit).order_by(desc(Shipment.created_at))
-        
-        result = await session.execute(query)
-        return result.scalars().all()
+    async def get_shipments(self,
+            skip: int = 0,
+            limit: int = 100,
+            status: Optional[str] = None,
+            at_risk: Optional[bool] = None,
+            db: AsyncSession = None
+        ) -> List[Shipment]:
+            """Get shipments with filtering"""
+            query = select(Shipment)
+
+            if status:
+                query = query.where(Shipment.status == ShipmentStatus(status))
+
+            if at_risk is not None:
+                query = query.where(Shipment.is_at_risk == at_risk)
+
+            query = query.offset(skip).limit(limit).order_by(desc(Shipment.created_at))
+
+            result = await db.execute(query)
+            return result.scalars().all()
     
     async def update_shipment(self, shipment_id: int, update_data: ShipmentUpdate,
                             session: AsyncSession) -> Optional[Shipment]:
@@ -113,13 +130,29 @@ class ShipmentService:
             return None
         
         # Update fields
+        def _to_naive(dt: Optional[datetime]) -> Optional[datetime]:
+            if dt is None:
+                return None
+            if dt.tzinfo is not None:
+                return dt.astimezone(timezone.utc).replace(tzinfo=None)
+            return dt
+
         for field, value in update_data.dict(exclude_unset=True).items():
-            if field == "metadata" and value:
+            if field == "shipment_metadata" and value:
                 shipment.shipment_metadata = {**shipment.shipment_metadata, **value}
             elif hasattr(shipment, field):
+                # normalize datetime fields if present
+                if isinstance(value, datetime):
+                    value = _to_naive(value)
                 setattr(shipment, field, value)
         
         shipment.updated_at = datetime.utcnow()
+        # Normalize any tz-aware datetimes before commit
+        for _field in ("estimated_departure", "estimated_arrival", "actual_departure", "actual_arrival", "last_risk_check"):
+            val = getattr(shipment, _field, None)
+            if isinstance(val, datetime) and val.tzinfo is not None:
+                setattr(shipment, _field, val.astimezone(timezone.utc).replace(tzinfo=None))
+
         await session.commit()
         await session.refresh(shipment)
         

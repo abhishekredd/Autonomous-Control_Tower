@@ -9,6 +9,20 @@ from app.core.database import engine, Base
 from app.core.celery_app import celery_app
 from app.services.orchestrator import CentralOrchestrator
 
+app = FastAPI()
+
+# CORS: allow frontend to call API. Limit origins in prod.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],    # restrict to your Streamlit domain in prod
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Include API under /api/v1
+app.include_router(api_router, prefix="/api/v1")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
