@@ -4,7 +4,7 @@ services:
     env: docker
     plan: free
     dockerfilePath: docker/Dockerfile.api
-    startCommand: uvicorn app.main:app --host 0.0.0.0 --port 8000
+
     envVars:
       - key: DATABASE_URL
         sync: false
@@ -24,7 +24,7 @@ services:
     env: docker
     plan: free
     dockerfilePath: docker/Dockerfile.api
-    startCommand: celery -A app.core.celery_app worker --loglevel=info
+
     envVars:
       - key: DATABASE_URL
         sync: false
@@ -40,7 +40,7 @@ services:
     env: docker
     plan: free
     dockerfilePath: docker/Dockerfile.api
-    startCommand: celery -A app.core.celery_app beat --loglevel=info
+
     envVars:
       - key: DATABASE_URL
         sync: false
@@ -56,7 +56,7 @@ services:
     env: docker
     plan: free
     dockerfilePath: docker/Dockerfile.mcp
-    startCommand: python -m app.mcp.servers.risk_detector
+
     envVars:
       - key: DATABASE_URL
         sync: false
@@ -70,7 +70,7 @@ services:
     env: docker
     plan: free
     dockerfilePath: docker/Dockerfile.mcp
-    startCommand: python -m app.mcp.servers.route_optimizer
+
     envVars:
       - key: DATABASE_URL
         sync: false
@@ -82,7 +82,7 @@ services:
     env: docker
     plan: free
     dockerfilePath: docker/Dockerfile.mcp
-    startCommand: python -m app.mcp.servers.stakeholder_comms
+
     envVars:
       - key: DATABASE_URL
         sync: false
@@ -96,7 +96,7 @@ services:
     env: docker
     plan: free
     dockerfilePath: frontend/Dockerfile
-    startCommand: streamlit run app.py --server.port 8501 --server.address 0.0.0.0
+
     envVars:
       - key: API_URL
         value: https://api.onrender.com
